@@ -1,10 +1,10 @@
-# Multi-Model Studio · B0.3.1
+# Multi-Model Studio · B0.3.2
 
 A **browser-first, free-tier-first AI workbench** built in the dedicated repository [worldlinemuse-lgtm/multi-model-ai-platform](https://github.com/worldlinemuse-lgtm/multi-model-ai-platform). This is an experimental static web application; Muse's existing website is separate.
 
 ## Open the application
 
-After **GitHub Pages** has been enabled for this repository, visit:
+**GitHub Pages deployment succeeded** on 2026-10-11 (run `38173064846`). Visit:
 
 **https://worldlinemuse-lgtm.github.io/multi-model-ai-platform/**
 
@@ -58,4 +58,8 @@ No API secrets, saved vault databases or real credentials are committed to GitHu
 
 ## Reliability update B0.3.1
 
-GitHub Actions now runs the full unit suite **and** a Chromium/Playwright browser smoke acceptance before attempting Pages deployment. The service worker uses a network-first strategy within this project scope so new website versions are fetched when online, with cached shell fallback offline. The initial Chromium CI run completed successfully on 2026-10-11. Hosting still requires the repository owner to enable GitHub Pages → Source: GitHub Actions once.
+GitHub Actions now runs the full unit suite **and** a Chromium/Playwright browser smoke acceptance before attempting Pages deployment. The service worker uses a network-first strategy within this project scope so new website versions are fetched when online, with cached shell fallback offline. The initial Chromium CI run completed successfully on 2026-10-11. GitHub Pages was enabled and the B0.3.1 deployment succeeded in run `38173064846`.
+
+## B0.3.2: live hosted acceptance
+
+The deploy workflow now adds an independent **hosted-acceptance** job after GitHub Pages reports success. It checks 13 deployed assets against the exact source using SHA-256, then runs the real Chromium smoke test at the publicly served website URL. A release counts as end-to-end verified only when `checks`, `deploy`, and `hosted-acceptance` all pass. See [hosted acceptance](docs/HOSTED_ACCEPTANCE.md). This confirms public web delivery and selected UI interactions, not real AI API provider connectivity.

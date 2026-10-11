@@ -2,9 +2,11 @@
 
 This project **does not modify** `worldlinemuse-lgtm/worldlinemuse-lgtm.github.io` (Muse's existing website). GitHub Pages supports a project-specific static site at its own path.
 
-**Expected site URL when enabled:** https://worldlinemuse-lgtm.github.io/multi-model-ai-platform/
+**Verified Pages deployment URL (2026-10-11):** https://worldlinemuse-lgtm.github.io/multi-model-ai-platform/
 
-## Owner action (one-time)
+## One-time setup already completed
+
+The owner enabled GitHub Actions as the Pages publishing source; GitHub Actions run `38173064846` succeeded on 2026-10-11. These are the steps to repeat only if Pages is reset or moved to another repository.
 
 1. Open [repository Pages settings](https://github.com/worldlinemuse-lgtm/multi-model-ai-platform/settings/pages), signed in as `worldlinemuse-lgtm`.
 2. Under **Build and deployment → Source**, select **GitHub Actions**.
@@ -28,3 +30,7 @@ See [manual test protocol](HOW_TO_TEST.md). Never check an actual API key into t
 ## Initial CI diagnosis (2026-10-11)
 
 The first two deployment runs had **passing automated checks** (including actual Chromium UI acceptance on the second run) but could not execute Pages deployment. `actions/configure-pages@v5` returned `Get Pages site failed ... Not Found`. This indicates the initial Pages site is not yet enabled; it is not a failure in the application source. GitHub's `enablement: true` input requires credentials more privileged than the workflow's default `GITHUB_TOKEN`; therefore the one-time owner action above is necessary. Once the owner enables Pages, rerun **Deploy browser studio** on `main`.
+
+## Post-deployment automatic verification
+
+B0.3.2 adds a `hosted-acceptance` job that runs only after `deploy` succeeds: compare the served public JavaScript, HTML, styles, service worker, favicon and dependencies against exact source hashes; then open the hosted site in Chromium and repeat the UI smoke actions. After pushing a new release, check all three workflow jobs are green. See [HOSTED_ACCEPTANCE.md](HOSTED_ACCEPTANCE.md).

@@ -1,4 +1,4 @@
-name: Deploy browser studio
+name: Deploy and verify browser studio
 on:
   push:
     branches: [main]
@@ -28,7 +28,7 @@ jobs:
         run: |
           python -m pip install playwright==1.57.0
           python -m playwright install --with-deps chromium
-      - name: Real Chromium browser smoke acceptance
+      - name: Real Chromium browser smoke acceptance (local checkout)
         run: |
           set -euo pipefail
           python -m http.server 8000 --bind 127.0.0.1 > /tmp/mm-studio-http.log 2>&1 &
@@ -42,6 +42,8 @@ jobs:
   deploy:
     needs: checks
     runs-on: ubuntu-latest
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -53,3 +55,22 @@ jobs:
           path: .
       - id: deployment
         uses: actions/deploy-pages@v4
+  hosted-acceptance:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DEPLOYED_URL: ${{ needs.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Check exact published files and CDN propagation
+        run: python tests/hosted_integrity.py --base-url "$DEPLOYED_URL" --attempts 18 --interval 5
+      - name: Install real browser
+        run: |
+          python -m pip install playwright==1.57.0
+          python -m playwright install --with-deps chromium
+      - name: Real Chromium acceptance on public GitHub Pages
+        run: python tests/browser_smoke.py --base-url "$DEPLOYED_URL"

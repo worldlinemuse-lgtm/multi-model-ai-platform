@@ -55,5 +55,11 @@ The repo has a Pages deployment workflow and a standalone static root. GitHub Pa
 
 - Source B0.3 first published at commit `2c91bbb9c672749b2c7db49593be156eb5a4212d`; 31 original source file Git blob hashes exactly matched the archived B0.3 ZIP.
 - GitHub Actions run `38172520278`: Node 22 unit/static checks passed; a **real Linux Chromium Playwright** smoke test passed browser navigation, isolated JavaScript runner, HTML preview, stop controls, mobile menu and JS error guard.
-- The deploy job failed specifically in `actions/configure-pages@v5` with GitHub Pages `Not Found` because Pages is not yet enabled. No public website deployment is attested. Repo owner must select **Settings → Pages → GitHub Actions**.
-- B0.3.1 adds the real-browser test gate to the workflow and a network-first/offline-fallback service worker with three new Node unit tests. GitHub Actions needs to rerun for the B0.3.1 commit before marking those new changes CI-confirmed.
+- At that point the deploy job failed in `actions/configure-pages@v5` because Pages had not been enabled. That historical failure was subsequently resolved.
+- B0.3.1 adds the real-browser test gate to the workflow and a network-first/offline-fallback service worker with three new Node unit tests. The B0.3.1 workflow was rerun and passed locally and in Chromium.
+
+## Pages activation and B0.3.2 hosted acceptance (2026-10-11)
+
+- GitHub Pages was successfully deployed for commit `30c66a241d7ba9576322539f1c21ec87f1144b60` in run `38173064846`, with both `checks` and `deploy` concluding `success`. Deployment output URL: `https://worldlinemuse-lgtm.github.io/multi-model-ai-platform/`. This is attested by GitHub Actions; user-device manual acceptance remains open.
+- B0.3.2 adds live-hosted verification after the deploy step. Exact deployed asset hashes and real Chromium user interactions must pass on the public Pages address; see `docs/HOSTED_ACCEPTANCE.md`. Mark B0.3.2 hosted acceptance verified **only after** this new run passes.
+- No actual user API keys, real provider responses, account balances, cross-origin provider CORS behavior, or adversarial sandbox audits have been verified.
