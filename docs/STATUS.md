@@ -50,3 +50,10 @@ Run `npm test` for Node unit and static checks. Tests include module format, ZIP
 ## Hosting
 
 The repo has a Pages deployment workflow and a standalone static root. GitHub Pages requires owner enabling the GitHub Actions publishing source in repository settings; publication is not established until the workflow succeeds and the public URL loads. See [deployment guide](DEPLOYMENT.md).
+
+## Verified B0.3.1 continuation (2026-10-11)
+
+- Source B0.3 first published at commit `2c91bbb9c672749b2c7db49593be156eb5a4212d`; 31 original source file Git blob hashes exactly matched the archived B0.3 ZIP.
+- GitHub Actions run `38172520278`: Node 22 unit/static checks passed; a **real Linux Chromium Playwright** smoke test passed browser navigation, isolated JavaScript runner, HTML preview, stop controls, mobile menu and JS error guard.
+- The deploy job failed specifically in `actions/configure-pages@v5` with GitHub Pages `Not Found` because Pages is not yet enabled. No public website deployment is attested. Repo owner must select **Settings → Pages → GitHub Actions**.
+- B0.3.1 adds the real-browser test gate to the workflow and a network-first/offline-fallback service worker with three new Node unit tests. GitHub Actions needs to rerun for the B0.3.1 commit before marking those new changes CI-confirmed.

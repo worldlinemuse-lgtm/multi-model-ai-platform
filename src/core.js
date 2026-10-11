@@ -1,4 +1,4 @@
-export const VERSION = 'B0.3';
+export const VERSION = 'B0.3.1';
 export const APP_KEY = 'mm-studio-v03';
 export const MAX_FILES = 120;
 export const MAX_FILE_LENGTH = 500000;

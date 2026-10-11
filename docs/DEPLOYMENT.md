@@ -24,3 +24,7 @@ Hosting supplies the interface and browser-local features. No backend server, cl
 ## Testing after publication
 
 See [manual test protocol](HOW_TO_TEST.md). Never check an actual API key into the public repository. Keys saved in the browser are encrypted at rest and are not automatically shared with the repository.
+
+## Initial CI diagnosis (2026-10-11)
+
+The first two deployment runs had **passing automated checks** (including actual Chromium UI acceptance on the second run) but could not execute Pages deployment. `actions/configure-pages@v5` returned `Get Pages site failed ... Not Found`. This indicates the initial Pages site is not yet enabled; it is not a failure in the application source. GitHub's `enablement: true` input requires credentials more privileged than the workflow's default `GITHUB_TOKEN`; therefore the one-time owner action above is necessary. Once the owner enables Pages, rerun **Deploy browser studio** on `main`.

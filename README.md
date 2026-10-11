@@ -1,4 +1,4 @@
-# Multi-Model Studio · B0.3
+# Multi-Model Studio · B0.3.1
 
 A **browser-first, free-tier-first AI workbench** built in the dedicated repository [worldlinemuse-lgtm/multi-model-ai-platform](https://github.com/worldlinemuse-lgtm/multi-model-ai-platform). This is an experimental static web application; Muse's existing website is separate.
 
@@ -55,3 +55,7 @@ Then open `http://localhost:8000`. It requires no npm build command. For code ch
 The original project and immutable historical releases A2–A2.6, B0.1 and B0.2 remain preserved in the user's Persistent File Library at `/Multi-Model AI Platform/`. B0.1 was published byte-for-byte in the Git history before this B0.3 development. B0.2 was retrieved from the Library as reference, including the provider guide registry; **B0.3 is a separately developed version and does not silently overwrite any archival release**.
 
 No API secrets, saved vault databases or real credentials are committed to GitHub. This code is experimental: run untrusted code only after reviewing the sandbox boundary; it has not received independent adversarial browser security accreditation.
+
+## Reliability update B0.3.1
+
+GitHub Actions now runs the full unit suite **and** a Chromium/Playwright browser smoke acceptance before attempting Pages deployment. The service worker uses a network-first strategy within this project scope so new website versions are fetched when online, with cached shell fallback offline. The initial Chromium CI run completed successfully on 2026-10-11. Hosting still requires the repository owner to enable GitHub Pages → Source: GitHub Actions once.

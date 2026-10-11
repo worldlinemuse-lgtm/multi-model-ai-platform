@@ -1,0 +1,36 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+
+const source=readFileSync(new URL('../sw.js',import.meta.url),'utf8');
+const base='https://example.github.io/multi-model-ai-platform/';
+function harness({online=true}={}){
+  const callbacks={},items=new Map();
+  const cache={addAll:async()=>{},put:async(request,response)=>{items.set(request.url,response);}};
+  const caches={open:async()=>cache,keys:async()=>[],delete:async()=>true,match:async(request)=>items.get(request.url)||null};
+  const self={location:{origin:new URL(base).origin},registration:{scope:base},clients:{claim:async()=>{}},skipWaiting:async()=>{},addEventListener:(kind,cb)=>callbacks[kind]=cb};
+  const net={online:true};net.online=online;
+  const fetch=async()=>{if(!net.online)throw Error('offline');return new Response('new version',{status:200});};
+  vm.runInNewContext(source,{self,caches,fetch,URL});
+  const navigate=async url=>{let result=null;const request=new Request(url);callbacks.fetch({request,respondWith:promise=>{result=promise;}});return result===null?null:await result;};
+  return {navigate,net,items};
+}
+
+test('service worker prefers new code from network over an older cached shell',async()=>{
+  const h=harness();const url=base+'src/main.js';h.items.set(url,new Response('old version'));
+  const live=await h.navigate(url);assert.equal(await live.text(),'new version');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(await h.items.get(url).text(),'new version');
+});
+
+test('service worker falls back to cached shell if offline',async()=>{
+  const h=harness({online:false});const url=base+'index.html';h.items.set(url,new Response('cached page'));
+  assert.equal(await (await h.navigate(url)).text(),'cached page');
+});
+
+test('service worker refuses cross-origin and out-of-scope interception',async()=>{
+  const h=harness();assert.equal(await h.navigate('https://api.groq.com/chat'),null);
+  assert.equal(await h.navigate('https://example.github.io/another-site/index.html'),null);
+  assert.equal(await h.navigate(base+'sw.js'),null);
+});

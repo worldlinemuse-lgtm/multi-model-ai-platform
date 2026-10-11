@@ -16,3 +16,7 @@ Run this on the GitHub Pages URL, using desktop Chrome/Firefox and an Android br
 12. Confirm all controls are keyboard-operable, fonts legible at 360 px phone width, no horizontal viewport overflow, and JS console has no unhandled exceptions. Capture screenshots and browser versions for any failures.
 
 **Acceptance status before this protocol is executed on a real hosted browser: NOT ACCREDITED.**
+
+## Continuous integration testing
+
+Every main-branch push executes `npm test` and then installs Playwright Chromium on GitHub Actions to run the included browser smoke test against a temporary local HTTP server. The `checks` job must pass before the Pages `deploy` job is attempted. Browser acceptance covers navigation, JS runner/stop, HTML preview and mobile menu; vault and live model calls remain dependent on browser/account-specific manual checks. GitHub Pages itself must first be enabled through repository settings before the deploy job can pass.
