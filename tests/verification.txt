@@ -1,7 +1,0 @@
-B0.1 verification — 2026-10-11
-PASS: node --check app.js
-PASS: tests/static_check.py —  unique HTML IDs; DOM references; script link; sandbox/CSP/localStorage/provider catalog guards
-PASS: tests/runner_check.cjs — runner script syntax; console log; error handling; HTML escape boundary
-UNTESTED: Live Chromium browser interaction. Playwright navigation to file:// was rejected by administrator: net::ERR_BLOCKED_BY_ADMINISTRATOR.
-UNTESTED: GitHub Pages deployment and live provider inference.
-BLOCKED: GitHub create_file(README.md) returned HTTP 403 Resource not accessible by integration. No source pushed to remote repository.

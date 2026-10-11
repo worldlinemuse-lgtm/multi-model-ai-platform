@@ -1,27 +1,57 @@
-# Multi-Model AI Platform — Browser B0.1
+# Multi-Model Studio · B0.3
 
-A standalone, static browser workspace for experiments with legitimate, recurring-free AI API access. This repository is independent of Muse's existing website.
+A **browser-first, free-tier-first AI workbench** built in the dedicated repository [worldlinemuse-lgtm/multi-model-ai-platform](https://github.com/worldlinemuse-lgtm/multi-model-ai-platform). This is an experimental static web application; Muse's existing website is separate.
 
-## Working features
+## Open the application
 
-- Responsive human-facing dashboard and implementation-status panels
-- Eight documented recurring-free **candidate** API routes with official key-setup and limits links
-- Multi-file browser editor, create/rename/delete, localStorage persistence, JSON import/export
-- JavaScript execution in an ephemeral opaque-origin sandboxed iframe; 5-second limit, stop, output/error capture
-- HTML/CSS/inline JavaScript previews in an opaque-origin sandboxed iframe with restrictive CSP
+After **GitHub Pages** has been enabled for this repository, visit:
 
-## Usage
+**https://worldlinemuse-lgtm.github.io/multi-model-ai-platform/**
 
-Serve these static files from any simple HTTP server (for example `python -m http.server 8000` in this folder) and open the page. Static GitHub Pages deployment is compatible with the architecture but is **not** evidence of a deployment.
+If that URL does not open the studio, follow [GitHub Pages setup](docs/DEPLOYMENT.md). The source can also run from any static HTTP server:
 
-The project stores editor files in this browser's localStorage. Export JSON regularly. Project imports replace the current project after confirmation.
+```sh
+python -m http.server 8000
+```
 
-## Boundaries
+Then open `http://localhost:8000`. It requires no npm build command. For code checks, install Node 20+ and run `npm test`.
 
-This B0.1 frontend does **not** connect to model providers or collect credentials. It has no real quota telemetry, remote inference, multi-model router, or browser Python runtime. Listed plans and resets are research-backed, not live-account verified. No real API keys or user databases belong in this public repository.
+## Getting started
 
-Browser code execution is not a Linux VM and is not a guarantee against all browser vulnerabilities. The opaque-origin iframe deliberately does not receive same-origin access; the restrictive CSP blocks network connections. This build is experimental, not security-accredited for arbitrary hostile code.
+1. **Code studio** — Open an existing project, edit `main.js`, click **Run code** and inspect the console. JavaScript runs inside a worker created in an opaque-origin sandboxed iframe. Open `index.html` and select **Preview HTML**. The starter Python file `hello.py` works when Pyodide finishes downloading in a supported online browser.
+2. **Projects** — Add files and folders by filename, create/rename projects, take snapshots and restore them, import/export `.json` and `.zip`. Files, notes and conversations persist in this browser via IndexedDB. Use **Settings → Download workspace backup** to export state without secrets.
+3. **Free providers** — Browse eight documented recurring-free onboarding routes. Their official signup/key/limits links explain how to obtain an eligible key; **unknown remaining allowance remains unknown**.
+4. **Key vault** — Choose a long passphrase to create an AES-256-GCM browser-local vault, check the provider's free plan and model eligibility, then save a key. Keys are encrypted at rest with a PBKDF2-derived key and are unlocked only for the current page session. They are never included in project or workspace exports.
+5. **Model chat** — Once a key is unlocked, select its route and click **Send**. The browser makes a direct request to the provider, if that provider supports CORS for this origin. Select **Compare two routes** for parallel replies from two explicitly connected providers. Calls only occur after you click Send.
+6. **Workflows** — Choose or edit 2–6 stages, an eligible route, and a goal; explicitly approve model requests. Stop at any time. Results and nonsecret usage events remain on your device. Generated code is never executed automatically.
+7. **Knowledge, data and media** — Save/search local notes, analyze CSV/JSON and chart numeric values, run a WebAssembly capability check, edit an image with browser canvas, and use speech playback / optional dictation.
 
-The separately archived **A2.6** offline Python/SQLite control plane with encrypted local key vault is preserved unchanged in the Persistent File Library under `/Multi-Model AI Platform/05_releases/`. It has not been migrated to or deployed as a public backend.
+## Real implementation boundaries
 
-See `docs/STATUS.md` for source provenance and test status.
+- **Working locally:** Static interface/navigation, project editor, IndexedDB persistence, snapshots, JSON/ZIP import/export, JS Worker execution harness, HTML/CSS/JS preview, encrypted key storage, local conversation/history management, keyword notes retrieval, data calculations/charting, canvas image filters, Web Speech bindings, WebAssembly capability test, controls and audit.
+- **Dependent on outside services:** First Python/Pyodide download; actual model inference, live comparison and multi-step provider workflows. Every provider connection additionally depends on valid user-owned credentials, plan eligibility, a supported model, browser networking and provider CORS. No live user account or provider inference has been verified by this release.
+- **Partial or not built:** Token-aware automatic routing/fallback, exact remaining per-account quotas, on-device model inference, external search, code-generation autoapply, graphical drag-and-drop flow editing, PDF text extraction, GitHub repository write integration inside the published site, third-party plugin SDK. The capability registry displays these honestly.
+- **No cost guarantee:** The app never initiates a provider call without an explicit Send/Run action. A free-plan attestation gate and OpenRouter `:free` route restriction reduce mistakes but cannot prove an external account will never bill. Confirm account settings and any spending cap at the provider.
+
+## Source layout
+
+| File | Purpose |
+|---|---|
+| `index.html`, `styles.css` | Responsive dark-theme studio interface and overlays |
+| `src/main.js` | UI/controller, project, model, workflow and audit wiring |
+| `src/core.js` | Versioned state, validation, provider registry and capability truth |
+| `src/storage.js`, `src/vault.js` | IndexedDB and encrypted private key storage |
+| `src/provider-api.js` | Eight fixed outgoing model-API transports (conditional) |
+| `src/sandbox.js` | Worker in opaque-origin sandbox, run/stop/timeout, HTML preview |
+| `src/zip.js` | Bounded ZIP creation and extraction with CRC checks |
+| `src/labs.js` | CSV/JSON, bar charts, images, speech, WebAssembly test |
+| `provider-guides.js` | Archived A2.6 descriptive free provider setup content |
+| `sw.js` | Offline cache for the local application shell |
+| `tests/` | Offline unit, sandbox worker, crypto, API, ZIP, parser and static checks |
+| `docs/` | Architecture, user testing and deployment truth |
+
+## Project provenance
+
+The original project and immutable historical releases A2–A2.6, B0.1 and B0.2 remain preserved in the user's Persistent File Library at `/Multi-Model AI Platform/`. B0.1 was published byte-for-byte in the Git history before this B0.3 development. B0.2 was retrieved from the Library as reference, including the provider guide registry; **B0.3 is a separately developed version and does not silently overwrite any archival release**.
+
+No API secrets, saved vault databases or real credentials are committed to GitHub. This code is experimental: run untrusted code only after reviewing the sandbox boundary; it has not received independent adversarial browser security accreditation.

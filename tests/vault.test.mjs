@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';globalThis.window={};
+import {KeyVault} from '../src/vault.js';
+test('vault creates, encrypts, locks, unlocks, deletes and rejects wrong password',async()=>{const v=new KeyVault();await v.create('a long passphrase 12345');await v.put('openrouter',{key:'fake-test-secret',model:'openrouter/free',attested:true});assert.equal(v.count,1);v.lock();assert.equal(v.get('openrouter'),null);const w=new KeyVault();await assert.rejects(()=>w.unlock('incorrect passphrase'),/incorrect/);await w.unlock('a long passphrase 12345');assert.equal(w.get('openrouter').key,'fake-test-secret');await w.erase();assert.equal(await w.exists(),false);});

@@ -1,28 +1,52 @@
-# B0.1 — Browser bootstrap checkpoint
+# Implementation truth — B0.3 browser studio
 
-Date: 2026-10-11
+Date: 2026-10-11. Current GitHub code is a new static-browser development increment, built after recovering the verified B0.1 and B0.2 historical sources from the Persistent File Library.
 
-## Sources of authority
+## Implemented and testable without an API key
 
-- Persistent File Library: `/Multi-Model AI Platform/00_authority/PROJECT_CHARTER.md`
-- `/Multi-Model AI Platform/00_authority/PROJECT_DECISIONS_AND_CONVERSATION_RECORD_2026_10_10.md`
-- `/Multi-Model AI Platform/02_architecture/STATIC_GITHUB_PAGES_CAPABILITY_INVENTORY_2026_10_10.md`
-- `/Multi-Model AI Platform/01_research/VERIFIED_RECURRING_FREE_API_ATLAS_2026_10_10.md`
-- Immutable A2.6 ZIP: `/Multi-Model AI Platform/05_releases/multimodel_control_plane_A2_6_LOCAL_KEY_VAULT_VM.zip`
-- A2.6 source SHA-256: `b9e9b9cd9db759f178d5db45b240a2f0ed3e8ca178b7c0cd30cf1ed014faeaa7` (verified this session)
+- Twelve responsive user-facing sections with navigation overlay and keyboard section search.
+- IndexedDB state containing separate projects, files, snapshots, threads, notes, audit entries and workflow records; legacy B0.1/B0.2 project migration; JSON/ZIP project import and export; browser storage backup and confirmation-based restore.
+- JavaScript code editor, local file management and worker execution in a sandboxed iframe with opaque origin, worker termination, output flood bound and six-second JS timeout; HTML/CSS/JS project preview in an opaque-origin iframe with network-denying CSP.
+- Local knowledge note import/search, CSV/JSON analysis and bar charts, browser WebAssembly arithmetic capability check, canvas image brightness/contrast/saturation and PNG export, browser speech playback and optional dictation.
+- Service worker for caching local application shell after site is loaded over HTTP(S).
+- AES-GCM encrypted local key vault unlocked with an operator passphrase (PBKDF2 SHA-256 260,000 iterations). Decrypted keys only live in active page memory; public GitHub repository and all nonsecret backups exclude keys.
+- Dated guided setup records for 8 recurring-free provider routes, sourced from the archived A2.6 `free_key_registry.json` provider-guide data. No trial-credit catalog entries.
 
-## B0.1 implemented
+## Implemented request paths, conditional on user-owned keys/network/CORS
 
-Static browser UI, recurring-free provider onboarding index, simple editor and browser file storage, local project JSON import/export, sandboxed JavaScript runner with timeout/stop, HTML/CSS/JS preview.
+| Provider | Fixed endpoint | Capability boundary |
+|---|---|---|
+| GroqCloud | `https://api.groq.com/openai/v1/chat/completions` | Model/account rate limits apply |
+| OpenRouter | `https://openrouter.ai/api/v1/chat/completions` | Only `openrouter/free` or `:free` model IDs accepted by the client |
+| Gemini | `https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent` | Free model eligibility must be verified in the account |
+| Cloudflare Workers AI | `https://api.cloudflare.com/client/v4/accounts/{ACCOUNT}/ai/run/{MODEL}` | A Workers AI account ID is required; model must be `@cf/*` |
+| Mistral Studio | `https://api.mistral.ai/v1/chat/completions` | Free Studio mode and supported free model required |
+| Ollama Cloud | `https://ollama.com/v1/chat/completions` | Available free cloud model must be supplied by user |
+| Hugging Face | `https://router.huggingface.co/v1/chat/completions` | Included credit may exhaust; no automatic paid fallback; select route carefully |
+| Aion Labs | `https://api.aionlabs.ai/v1/chat/completions` | Free allowance, eligibility and model need current verification |
 
-## Not implemented or not verified
+Eight transport request shapes are locally unit-tested with **synthetic fake credentials only**. No live provider credentials, account balance lookups, CORS integration or real provider replies are claimed. Explicit human action required for each request and supervised workflow.
 
-No live AI adapters, model inference, key vault, actual user free-tier verification or balances, Python runtime, cross-device sync, UI visual acceptance, or public GitHub Pages deployment.
+Provider API token usage, when actually returned, is labeled `provider_reported`, never invented; no precise remaining balance is displayed unless a separately validated endpoint returns one (not implemented).
 
-## Publish status
+## Experimental / partial
 
-A GitHub connector was successfully able to read `worldlinemuse-lgtm/multi-model-ai-platform` but initial README creation failed HTTP 403 `Resource not accessible by integration`. This checkpoint is therefore packaged for later GitHub publishing; do not claim this B0.1 source is pushed.
+- Python on Pyodide (CDN v0.28.3) runs inside a dedicated worker within an opaque-origin frame if the browser permits the CDN and WASM initialization. Python browser runtime has not been real-browser accepted.
+- HTML preview runs local JS/CSS and blocks remote network by CSP; it is not a general-purpose hosted server, npm environment or Linux VM.
+- Workflow builder supports 2–6 editable textual stages, sequential request execution, stop/error and outcome logs. No drag-and-drop arbitrary tool workflow graph, background scheduling, or independent agent permission system.
+- OpenRouter free-only ID validation is enforced; other provider plans cannot be remotely certified. The user must confirm plan/limits and disable overage on the provider side where possible.
+- A fixed provider registry is included. Third-party provider plugin API and automatic quota-based fallback are not ready.
+
+## Unimplemented
+
+On-device LLM/WebGPU weights, full Monaco-class IDE completion/diagnostics, local PDF text extraction, full modality API support, repo writes from the public page, remote search API, precise provider remaining allowance, cross-device synchronization, arbitrary virtual machine provisioning, automatic code modification based on model output.
 
 ## Verification
 
-See `tests/verification.txt` packaged with this checkpoint for current-session results. Browser-level tests are not claimed where the environment prevents them.
+Run `npm test` for Node unit and static checks. Tests include module format, ZIP archive CRC and file validation, the AES-GCM vault (create/unlock/wrong password/delete), API request shapes and mock provider responses, isolated Worker execution/termination in Node threads, document CSP construction, and local CSV/JSON analysis.
+
+**Browser GUI acceptance:** Chromium navigation in the controlled VM returns `net::ERR_BLOCKED_BY_ADMINISTRATOR` for loopback pages. No interactive browser screenshot or live website/mobile/device accreditation claimed here. Until a person tests the GitHub Pages-hosted page, visuals and browser-specific sandbox/CORS/Pyodide/IndexedDB edge cases remain unverified.
+
+## Hosting
+
+The repo has a Pages deployment workflow and a standalone static root. GitHub Pages requires owner enabling the GitHub Actions publishing source in repository settings; publication is not established until the workflow succeeds and the public URL loads. See [deployment guide](DEPLOYMENT.md).

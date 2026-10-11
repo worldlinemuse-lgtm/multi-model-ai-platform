@@ -1,0 +1,14 @@
+node_modules/
+*.local
+.env
+.env.*
+*.sqlite
+*.db
+*.pem
+*.key
+*.token
+__pycache__/
+.pytest_cache/
+test-results/
+playwright-report/
+.DS_Store
