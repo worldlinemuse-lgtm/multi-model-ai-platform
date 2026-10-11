@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#11192c">
+  <meta name="description" content="A browser-first workspace for recurring-free AI API access and code experimentation.">
+  <title>Multi-Model AI Platform</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <div class="identity"><span class="mark">◈</span><span>Multi-Model <strong>AI Platform</strong><small>Browser workspace · B0.1</small></span></div>
+      <nav class="nav" aria-label="Sections">
+        <button type="button" class="nav-item active" data-view="overview" aria-current="page">◉ <span>Overview</span></button>
+        <button type="button" class="nav-item" data-view="workspace">⌘ <span>Code workspace</span></button>
+        <button type="button" class="nav-item" data-view="providers">◇ <span>Free API directory</span></button>
+        <button type="button" class="nav-item" data-view="about">ⓘ <span>Build status</span></button>
+      </nav>
+      <div class="side-foot"><span class="dot"></span> Offline-capable workspace<br><small>No provider keys connected</small></div>
+    </aside>
+    <main id="main" class="main">
+      <header class="topbar"><div><span class="eyebrow">Experimental control plane</span><h1 id="page-title">Overview</h1></div><div class="top-actions"><span class="status-pill">Browser-local</span><a class="repo-link" href="https://github.com/worldlinemuse-lgtm/multi-model-ai-platform" target="_blank" rel="noopener noreferrer">GitHub ↗</a></div></header>
+      <section class="view active" id="view-overview" aria-labelledby="page-title">
+        <div class="hero"><p class="eyebrow">YOUR WORKSPACE, YOUR CHOICES</p><h2>One place to build, explore, and connect models.</h2><p>Start writing and running code in your browser. Explore eight recurring-free API onboarding routes without trial-credit or paid fallback assumptions.</p><div class="hero-actions"><button type="button" class="primary" data-goto="workspace">Open code workspace →</button><button type="button" class="secondary" data-goto="providers">Explore providers</button></div></div>
+        <div class="metric-grid"><article class="metric"><span>Cataloged free routes</span><strong>8</strong><small>Research-backed, not connected</small></article><article class="metric"><span>Local execution</span><strong>JS</strong><small>Sandboxed iframe</small></article><article class="metric"><span>Project storage</span><strong>Local</strong><small>Saved in this browser</small></article><article class="metric"><span>Live AI requests</span><strong>0</strong><small>Not implemented in B0.1</small></article></div>
+        <div class="panel"><h3>What works today</h3><div class="feature-grid"><div><strong>Code & preview</strong><p>Edit multiple files, run JavaScript, and preview HTML with CSS and JS.</p></div><div><strong>Preserve your work</strong><p>Browser storage plus JSON project import and export.</p></div><div><strong>Provider onboarding</strong><p>Follow official setup and rate-limit documentation for eligible free routes.</p></div></div></div>
+      </section>
+      <section class="view" id="view-workspace" aria-label="Code workspace" hidden>
+        <div class="section-intro"><h2>Code workspace</h2><p>Edit project files locally. Run JavaScript in a constrained iframe or preview HTML.</p></div>
+        <div class="workspace">
+          <aside class="file-panel"><div class="pane-head"><strong>Project files</strong><button type="button" id="new-file" class="icon-btn" title="New file" aria-label="New file">＋</button></div><div id="file-list" class="file-list" role="list" aria-label="Project files"></div><div class="file-actions"><button type="button" id="rename-file">Rename</button><button type="button" id="delete-file">Delete</button></div></aside>
+          <div class="editor-panel"><div class="editor-head"><div><strong id="active-file-label">main.js</strong><span id="save-status">Saved locally</span></div><div class="editor-tools"><button type="button" class="primary small" id="run-js">▶ Run JS</button><button type="button" class="secondary small" id="preview-html">Preview HTML</button><button type="button" class="danger small" id="stop-run" disabled>Stop</button></div></div><label class="sr-only" for="editor">File content editor</label><textarea id="editor" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-label="Code editor"></textarea><div class="output-head"><strong>Console</strong><button type="button" id="clear-console" class="quiet">Clear</button></div><pre class="console" id="console-output" role="log" aria-live="polite">Ready. Press Run JS to execute main.js.</pre><div class="preview-head"><strong>Preview</strong><small>Opaque-origin sandbox</small></div><div id="frame-host" class="frame-host"><div class="placeholder">HTML previews appear here.</div></div></div>
+        </div>
+        <div class="workspace-footer"><button type="button" class="secondary small" id="export-project">Export project JSON</button><label class="import-label">Import project JSON<input type="file" id="import-project" accept=".json,application/json"></label><span>Ctrl/Cmd + Enter: run selected JavaScript</span></div>
+      </section>
+      <section class="view" id="view-providers" aria-label="Free API directory" hidden><div class="section-intro"><h2>Recurring-free API directory</h2><p>Official onboarding routes based on research dated October 10, 2026. Limits vary by provider, model and account. No connections or balances are represented as live.</p></div><div class="search-wrap"><label for="provider-search" class="sr-only">Search providers</label><input id="provider-search" placeholder="Search providers and reset windows…" type="search"></div><div id="provider-grid" class="provider-grid"></div><p class="disclaimer">A listed route is not proof of free-tier eligibility for your account. Check current official terms before connecting any key. No credentials are collected in this version.</p></section>
+      <section class="view" id="view-about" aria-label="Build status" hidden><div class="section-intro"><h2>Implementation truth</h2><p>Clear boundaries between shipping features, preserved prior work, and future work.</p></div><div class="panel status-list"><h3>Implemented in browser B0.1</h3><p>Responsive navigation, official-provider directory, editable files, browser-local persistence, JSON import/export, isolated JS execution, HTML preview, stop and timeout controls.</p><h3>Existing historical release, not deployed here</h3><p>A2.6: Python/SQLite offline control plane, synthetic quota accounting and local encrypted key vault. Historical release is preserved in the project’s Persistent File Library; it is not a hosted API service.</p><h3>Not yet connected or implemented</h3><p>Remote AI inference, live model routing, actual account quota balances, browser key vault, Python/WebAssembly runtime, multi-model collaboration, and cross-device sync.</p><h3>What the sandbox means</h3><p>The runner executes JavaScript in a separate sandboxed iframe without same-origin permissions; a restrictive Content Security Policy blocks network connections. This is browser-based code execution, not a full Linux virtual machine.</p></div></section>
+    </main>
+  </div>
+</body>
+</html>
