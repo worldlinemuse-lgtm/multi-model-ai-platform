@@ -39,6 +39,7 @@ jobs:
             sleep 1
           done
           python tests/browser_smoke.py --base-url http://127.0.0.1:8000
+          python tests/browser_regression.py --base-url http://127.0.0.1:8000
   deploy:
     needs: checks
     runs-on: ubuntu-latest
@@ -74,3 +75,4 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Real Chromium acceptance on public GitHub Pages
         run: python tests/browser_smoke.py --base-url "$DEPLOYED_URL"
+          python tests/browser_regression.py --base-url "$DEPLOYED_URL"

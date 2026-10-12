@@ -1,4 +1,4 @@
-# Multi-Model Studio · B0.3.2
+# Multi-Model Studio · B0.3.3
 
 A **browser-first, free-tier-first AI workbench** built in the dedicated repository [worldlinemuse-lgtm/multi-model-ai-platform](https://github.com/worldlinemuse-lgtm/multi-model-ai-platform). This is an experimental static web application; Muse's existing website is separate.
 
@@ -45,6 +45,7 @@ Then open `http://localhost:8000`. It requires no npm build command. For code ch
 | `src/sandbox.js` | Worker in opaque-origin sandbox, run/stop/timeout, HTML preview |
 | `src/zip.js` | Bounded ZIP creation and extraction with CRC checks |
 | `src/labs.js` | CSV/JSON, bar charts, images, speech, WebAssembly test |
+| `src/knowledge.js` | Versioned, validated knowledge note archive import/export |
 | `provider-guides.js` | Archived A2.6 descriptive free provider setup content |
 | `sw.js` | Offline cache for the local application shell |
 | `tests/` | Offline unit, sandbox worker, crypto, API, ZIP, parser and static checks |
@@ -63,3 +64,19 @@ GitHub Actions now runs the full unit suite **and** a Chromium/Playwright browse
 ## B0.3.2: live hosted acceptance
 
 The deploy workflow now adds an independent **hosted-acceptance** job after GitHub Pages reports success. It checks 13 deployed assets against the exact source using SHA-256, then runs the real Chromium smoke test at the publicly served website URL. A release counts as end-to-end verified only when `checks`, `deploy`, and `hosted-acceptance` all pass. See [hosted acceptance](docs/HOSTED_ACCEPTANCE.md). This confirms public web delivery and selected UI interactions, not real AI API provider connectivity.
+
+
+## B0.3.3: audited functionality repairs (2026-10-12)
+
+This release addresses a first controlled subset of the 60-item functional completeness audit.
+
+- **Safer state:** Validate full active project/thread references and render-critical record fields; prevent malformed backup replacement. Restore/reset write persistent state **before** swapping the in-memory UI; storage errors are surfaced instead of being declared successful.
+- **Correct data:** Blank or nonnumeric CSV values do not become zero; parsing failures clear old analysis rather than continuing to display stale results.
+- **Truthful usage and storage:** Unreported token fields remain unknown. Distinguish temporary-memory fallback from durable IndexedDB.
+- **Actual model comparison controls:** Users select the second saved provider explicitly; a provider receives only its own past assistant replies, not another provider's replies. This is not a claim of live provider-CORS acceptance.
+- **Sequential workflow correctness:** More than six stages are rejected visibly instead of silently dropped; stage numbers in model instructions match the actual stage.
+- **Knowledge roundtrip:** Exported note archives can be reimported with schema validation; prior exported arrays also work. Cloudflare account ID is restored when navigating from its provider card.
+- **No false labels:** The output panel is labeled *Execution log* rather than terminal; conversation search/edit is not falsely claimed as implemented.
+- **Regression coverage:** new Node tests and isolated real-Chromium workflows on checkout and deployed Pages, including simulated IndexedDB write failure with fake data and fake key slots. No real credentials are sent in tests.
+
+**Still incomplete:** Actual provider end-to-end inference; backend search; per-account quota observation; multi-stage independent model assignment; complex language runtimes, Python acceptance; richer IDE, images, media and document extraction; agent workflows. The remaining audit findings are preserved unchanged.

@@ -6,6 +6,11 @@ if(id==='gemini'){url=`https://generativelanguage.googleapis.com/v1beta/models/$
 else if(id==='cloudflare'){if(!/^[a-f0-9]{32}$/i.test(credential.account||''))throw Error('Cloudflare requires a 32-character account ID.');url=`https://api.cloudflare.com/client/v4/accounts/${credential.account}/ai/run/${model}`;headers.Authorization=`Bearer ${credential.key}`;body={messages:simplified.filter(m=>m.role!=='system').map(m=>({role:m.role,content:m.content})),max_tokens:512};}
 else{url=ENDPOINTS[id];if(!url)throw Error('This provider does not have a configured transport');headers.Authorization=`Bearer ${credential.key}`;body={model,messages:simplified,stream:false,max_tokens:512};if(id==='openrouter'){headers['X-Title']='Multi-Model Studio';}}
 return {url,headers,body};}
+export function parseReportedUsage(usage){
+ if(!usage||typeof usage!=='object'||Array.isArray(usage))return null;
+ const token = value => value===undefined||value===null||value===''?null:(Number.isSafeInteger(Number(value))&&Number(value)>=0?Number(value):null);
+ return {prompt_tokens:token(usage.prompt_tokens),completion_tokens:token(usage.completion_tokens),total_tokens:token(usage.total_tokens),source:'provider_reported'};
+}
 export async function callProvider(id,credential,messages,{signal}={}){const request=buildRequest(id,credential,messages);let response;try{response=await fetch(request.url,{method:'POST',headers:request.headers,body:JSON.stringify(request.body),signal,mode:'cors',credentials:'omit',cache:'no-store',redirect:'error'});}catch(e){if(e.name==='AbortError')throw e;throw Error(`Browser request failed for ${providerById(id)?.name}. The provider may block cross-origin requests (CORS), or the network may be unavailable. ${e.message}`);}
 let payload;const responseText=await response.text();try{payload=JSON.parse(responseText);}catch{throw Error(`${id}: response was not JSON (HTTP ${response.status}).`);}if(!response.ok||payload?.success===false){const msg=payload?.error?.message||payload?.error||payload?.message||payload?.errors?.[0]?.message||JSON.stringify(payload).slice(0,260);throw Error(`${id}: HTTP ${response.status} — ${String(msg).slice(0,300)}`);}
 let text='',usage=payload.usage||payload.result?.usage||null;
@@ -13,4 +18,4 @@ if(id==='gemini'){text=(payload.candidates||[]).flatMap(c=>(c.content?.parts||[]
 else if(id==='cloudflare'){const output=payload.result?.response||payload.result?.output||payload.result;text=typeof output==='string'?output:Array.isArray(output)?output.map(x=>x.text||x.content||'').join('\n'):JSON.stringify(output??'');}
 else text=payload.choices?.[0]?.message?.content||payload.output_text||'';
 if(Array.isArray(text))text=text.map(p=>p.text||'').join('\n');if(!text)throw Error(`${id}: API returned no text; check model compatibility and response format.`);
-return {text:String(text).slice(0,60000),usage:usage&&typeof usage==='object'?{prompt_tokens:Number(usage.prompt_tokens)||0,completion_tokens:Number(usage.completion_tokens)||0,total_tokens:Number(usage.total_tokens)||0,source:'provider_reported'}:null,model:payload.model||credential.model,id};}
+return {text:String(text).slice(0,60000),usage:parseReportedUsage(usage),model:payload.model||credential.model,id};}

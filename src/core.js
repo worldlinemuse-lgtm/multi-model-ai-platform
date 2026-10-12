@@ -1,4 +1,4 @@
-export const VERSION = 'B0.3.2';
+export const VERSION = 'B0.3.3';
 export const APP_KEY = 'mm-studio-v03';
 export const MAX_FILES = 120;
 export const MAX_FILE_LENGTH = 500000;
@@ -17,7 +17,7 @@ export const PROVIDERS = Object.freeze([
 ]);
 export const VIEWS = Object.freeze({overview:'Overview',workspace:'Code studio',chat:'Model chat',workflows:'Workflows',knowledge:'Knowledge',datalab:'Data lab',media:'Media tools',providers:'Free providers',vault:'Key vault',usage:'Usage & audit',capabilities:'Capabilities',settings:'Settings'});
 export const CAPABILITIES = [
-['B01','Conversation threads','local','Editable, searchable local conversation history; model replies require a connected route'],
+['B01','Conversation threads','local','Saved conversation threads; model replies require a connected route; editing and search not yet available'],
 ['B02','Multi-file IDE','local','Editable source, file explorer, project selection, line numbers and snapshots'],
 ['B03','JavaScript execution','local','Terminating Web Worker inside opaque-origin sandbox'],
 ['B04','Python WebAssembly','conditional','Pyodide loads on demand over CDN and executes inside isolated worker'],
@@ -41,7 +41,7 @@ export const CAPABILITIES = [
 ['E01','Provider onboarding','local','Eight verified dated catalog entries with official signup and key links'],
 ['E02','Credential handling','local','Encrypted local API keys with user-attested free plan'],
 ['E03','Live model inference','conditional','Direct browser fetch with provider key + CORS + eligible model/account'],
-['E04','Model comparison','conditional','Send the same prompt to two explicitly selected connected routes'],
+['E04','Model comparison','conditional','Send the same prompt to two connected routes; explicit secondary selection is not yet available'],
 ['E05','Model routing','partial','Explicit route selection; quota-aware auto-routing not implemented'],
 ['E06','Allowance accounting','partial','Logs provider-reported tokens and local attempts; remaining quota unknown'],
 ['E07','Fallback routing','planned','No automatic billed or paid fallback'],
@@ -66,7 +66,33 @@ export function safeName(name){return typeof name==='string' && name.length<=100
 export function safeFiles(files){return files && typeof files==='object'&&!Array.isArray(files) && Object.keys(files).length>0&&Object.keys(files).length<=MAX_FILES&&Object.entries(files).every(([n,v])=>safeName(n)&&typeof v==='string'&&v.length<=MAX_FILE_LENGTH) && Object.values(files).reduce((s,v)=>s+v.length,0)<=MAX_PROJECT_BYTES;}
 export function starterProject(name='First project'){return {id:uid('project'),name,active:'main.js',updated:now(),files:{'main.js':'// Run with ▶ Run code. This runs in an isolated Web Worker.\nconst message = "Hello from Multi-Model Studio!";\nconsole.log(message);\nconsole.log("2 + 2 =", 2 + 2);','index.html':'<!doctype html>\n<html><head><title>My first preview</title></head><body>\n<h1>Hello from the browser workbench!</h1>\n<p>Edit this file and press Preview HTML.</p>\n<button onclick="document.getElementById(\'result\').textContent = \'It works!\'">Test interaction</button>\n<p id="result"></p>\n</body></html>','style.css':'body { font: 16px system-ui; padding: 28px; color: #1d2b43; }\nh1 { color: #4162c6; }\nbutton { background: #4162c6; color: white; border: 0; padding: 10px; border-radius: 8px; }','hello.py':'print("Python is running inside WebAssembly!")\nprint("2 + 2 =", 2 + 2)'}};}
 export function freshState(){const p=starterProject();const thread={id:uid('thread'),title:'New conversation',created:now(),messages:[]};return {format:APP_KEY,projects:[p],activeProjectId:p.id,snapshots:[],threads:[thread],activeThreadId:thread.id,notes:[],audit:[],workflows:[],preferences:{accent:'cyan',compact:false},created:now()};}
-export function validateState(s){if(!s||s.format!==APP_KEY||!Array.isArray(s.projects)||!s.projects.length||s.projects.length>30)return false; if(!s.projects.every(p=>typeof p.id==='string'&&typeof p.name==='string'&&safeFiles(p.files)&&Object.hasOwn(p.files,p.active)))return false;if(!s.projects.some(p=>p.id===s.activeProjectId))return false;if(!Array.isArray(s.snapshots)||s.snapshots.length>100||!s.snapshots.every(x=>x&&x.project&&safeFiles(x.project.files)))return false;if(!Array.isArray(s.threads)||s.threads.length>120||!s.threads.every(t=>Array.isArray(t.messages)&&t.messages.length<=150&&typeof t.id==='string'))return false;if(!Array.isArray(s.notes)||s.notes.length>MAX_NOTES||!s.notes.every(n=>typeof n.content==='string'&&n.content.length<=100000))return false;if(!Array.isArray(s.audit)||s.audit.length>MAX_AUDIT||!Array.isArray(s.workflows))return false;return true;}
+const record = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+const textField = (v,max=100000) => typeof v === 'string' && v.length <= max;
+const idField = v => textField(v,140) && v.length > 0;
+const uniqueIds = items => new Set(items.map(x=>x.id)).size === items.length;
+function validProject(p){return record(p) && idField(p.id) && textField(p.name,100) && idField(p.active) && safeFiles(p.files) && Object.hasOwn(p.files,p.active) && textField(p.updated,80);}
+function validSnapshot(s){return record(s) && idField(s.id) && textField(s.at,80) && textField(s.label,60) && validProject(s.project);}
+function validMessage(m){return record(m) && ['user','assistant','system'].includes(m.role) && textField(m.content,60000) && (m.provider===undefined||textField(m.provider,140)) && (m.model===undefined||textField(m.model,140)) && (m.error===undefined||typeof m.error==='boolean') && (m.at===undefined||textField(m.at,80));}
+function validThread(t){return record(t) && idField(t.id) && textField(t.title,300) && textField(t.created,80) && Array.isArray(t.messages) && t.messages.length<=150 && t.messages.every(validMessage);}
+function validNote(n){return record(n) && idField(n.id) && textField(n.title,150) && textField(n.content,100000) && textField(n.created,80);}
+const validTokens = v => v===null || (Number.isSafeInteger(v) && v>=0);
+function validUsage(u){return u===null || (record(u) && validTokens(u.prompt_tokens) && validTokens(u.completion_tokens) && validTokens(u.total_tokens) && textField(u.source,100));}
+function validAudit(a){return record(a) && idField(a.id) && textField(a.at,80) && textField(a.op,100) && textField(a.provider,140) && textField(a.status,100) && (a.usage===undefined || validUsage(a.usage));}
+function validWorkflow(w){return record(w) && idField(w.id) && textField(w.at,80) && textField(w.provider,140) && textField(w.template,100) && textField(w.goal,10000) && ['running','stopped','failed','complete'].includes(w.status) && Array.isArray(w.steps) && w.steps.length<=6 && w.steps.every(x=>record(x)&&textField(x.stage,200)&&textField(x.content,60000)&&(x.model===undefined||textField(x.model,140)));}
+export function validateState(s){
+ if(!record(s)||s.format!==APP_KEY||!textField(s.created,80))return false;
+ if(!Array.isArray(s.projects)||!s.projects.length||s.projects.length>30||!s.projects.every(validProject)||!uniqueIds(s.projects)||!s.projects.some(p=>p.id===s.activeProjectId))return false;
+ if(!Array.isArray(s.snapshots)||s.snapshots.length>100||!s.snapshots.every(validSnapshot)||!uniqueIds(s.snapshots))return false;
+ if(!Array.isArray(s.threads)||!s.threads.length||s.threads.length>120||!s.threads.every(validThread)||!uniqueIds(s.threads)||!s.threads.some(t=>t.id===s.activeThreadId))return false;
+ if(!Array.isArray(s.notes)||s.notes.length>MAX_NOTES||!s.notes.every(validNote)||!uniqueIds(s.notes))return false;
+ if(!Array.isArray(s.audit)||s.audit.length>MAX_AUDIT||!s.audit.every(validAudit))return false;
+ if(!Array.isArray(s.workflows)||s.workflows.length>40||!s.workflows.every(validWorkflow))return false;
+ return record(s.preferences) && ['cyan','violet','amber'].includes(s.preferences.accent) && typeof s.preferences.compact==='boolean';
+}
+export function historyForRoute(messages,route){
+ return messages.filter(m=>m && (m.role==='user'||(m.role==='assistant'&&m.provider===route&&!m.error)))
+  .slice(-10).map(m=>({role:m.role,content:m.content}));
+}
 export function migrateLegacy(source){if(!source||!safeFiles(source.files)||!Object.hasOwn(source.files,source.active))throw Error('Cannot migrate invalid legacy project');const state=freshState();state.projects[0].files=clone(source.files);state.projects[0].active=source.active;state.projects[0].name='Recovered B0.2 project';return state;}
 export function csvSummary(text){const rows=text.trim().split(/\r?\n/).filter(Boolean);if(!rows.length)return 'Empty CSV';return `${rows.length} rows · ${rows[0].split(',').length} columns\nHeaders: ${rows[0].slice(0,400)}`;}
 export function routeDescription(connected){return `${connected} / ${PROVIDERS.length}`;}

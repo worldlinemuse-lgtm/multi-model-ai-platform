@@ -63,3 +63,8 @@ The repo has a Pages deployment workflow and a standalone static root. GitHub Pa
 - GitHub Pages was successfully deployed for commit `30c66a241d7ba9576322539f1c21ec87f1144b60` in run `38173064846`, with both `checks` and `deploy` concluding `success`. Deployment output URL: `https://worldlinemuse-lgtm.github.io/multi-model-ai-platform/`. This is attested by GitHub Actions; user-device manual acceptance remains open.
 - B0.3.2 adds live-hosted verification after the deploy step. Exact deployed asset hashes and real Chromium user interactions must pass on the public Pages address; see `docs/HOSTED_ACCEPTANCE.md`. Mark B0.3.2 hosted acceptance verified **only after** this new run passes.
 - No actual user API keys, real provider responses, account balances, cross-origin provider CORS behavior, or adversarial sandbox audits have been verified.
+
+
+## B0.3.3 audited defect-remediation batch (2026-10-12)
+
+See `docs/B0_3_3_REPAIRS.md` and original Library `B0_3_2_FUNCTIONAL_COMPLETENESS_AUDIT_2026_10_11.md`. Source-level fixes have been implemented and extended with browser regressions. The new release is **not verified as deployed until the three CI jobs (checks, deploy, hosted-acceptance) pass**. No provider secrets, live provider tests or background agents were introduced.

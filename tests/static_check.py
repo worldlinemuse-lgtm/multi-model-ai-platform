@@ -13,7 +13,7 @@ class Parser(HTMLParser):
 p=Parser();p.feed((root/'index.html').read_text());assert len(p.ids)==len(set(p.ids)),'duplicate IDs';assert len(p.screen)>=12 and set(p.screen)==set(p.nav),'Missing navigation screens'
 for x in p.scripts:assert (root/x).is_file(),x
 src=(root/'src/main.js').read_text();referenced=set(re.findall(r"\$\('([^']+)'\)",src))|set(re.findall(r"el\('([^']+)'\)",src));assert referenced.issubset(p.ids),f'Missing UI IDs: {referenced-set(p.ids)}'
-for name in ['core','storage','provider-api','vault','sandbox','zip','labs']:assert (root/'src'/f'{name}.js').exists()
+for name in ['core','storage','provider-api','vault','sandbox','zip','labs','knowledge']:assert (root/'src'/f'{name}.js').exists()
 zip_source=(root/'src/zip.js').read_text();assert 'crc32' in zip_source and 'maxBytes' in zip_source
 sandbox=(root/'src/sandbox.js').read_text();assert "worker-src blob:" in sandbox and "connect-src 'none'" in sandbox
 vault=(root/'src/vault.js').read_text();assert 'PBKDF2' in vault and 'AES-GCM' in vault and '260000' in vault
