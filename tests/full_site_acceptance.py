@@ -199,7 +199,7 @@ def test_vault_lifecycle(page,context):
     toast_has(page,'Encrypted key slot saved')
     assert FAKE_KEY not in page.locator('#vault-items').inner_text()
     page.locator('#vault-lock').click()
-    assert page.locator('#vault-status').inner_text()=='LOCKED'
+    page.wait_for_function('document.querySelector("#vault-status").textContent === "LOCKED"',timeout=7000)
     page.locator('#vault-password').fill('wrong-passphrase-value')
     page.locator('#vault-submit').click()
     toast_has(page,'Passphrase incorrect')
