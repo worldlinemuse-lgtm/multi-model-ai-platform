@@ -12,11 +12,11 @@ There are 60 baseline items: 17 D, 33 P and 10 N. This tracker is a **post-basel
 - **PR #3 / main `2e310160e9c0fb50eefe6946a006c799ab521938`:** P14 local conversation search, selected-thread export/deletion, local user-message editing, retention warnings. Post-merge run `38280143553`: SUCCESS. P14 remains **partial** as full message-editing semantics and every history edge case are not certified.
 - **D14** misleading capability copy corrected in earlier batch. History searching and local user-message editing were later added with PR #3. **P21** misleading `TERMINAL` label corrected only; a real shell is *not* implemented.
 
-## Merged code with separate hosted acceptance not yet passing
+## PR #4 code verified after hosted CI repair
 
 - **PR #4 / main `acf9b3dcd8e03f0e054860f1e749357bbfe5e54e`:** P16 partial cross-project keyword search and live source resolution; P28 partial explicit provider request deadline/AbortController behavior (no automatic retries). Branch run `38280578428`: SUCCESS.
-- PR #4 post-merge run `38280806433`: unit/browser checkout and deploy succeeded; `hosted-acceptance` **FAILED** at the public browser smoke with no diagnostic detail in the old test. Therefore PR #4 must not be marked fully hosted verified.
-- Follow-up PR adds awaited browser assertions and stage diagnostics, scoped workflow concurrency, and bounded CI jobs. Its merge, deployment and hosted acceptance remain pending until independently confirmed.
+- PR #4 post-merge run `38280806433` failed public browser smoke despite successful checkout checks and deploy. It was **superseded by PR #5's fully passing post-merge run**. The old failed run is retained for audit evidence.
+- **PR #5 / main `a6deabef4e387b5618b186727dbc22318373cf06`:** hosted smoke steps now have bounded state checks and diagnostic tracebacks; CI separates PR and production concurrency. Post-merge run `38299182398`: checks, deploy and hosted-acceptance all **SUCCESS**. P16 and P28 behavior are accepted at their stated partial scope; live API accounts remain untested.
 
 ## Remaining partial or open P items
 
