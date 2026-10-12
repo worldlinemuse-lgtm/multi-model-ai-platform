@@ -101,6 +101,37 @@ def check_workspace(p):
     approve(p)
     p.locator('#delete-project').click()
     verify('qa-import' not in p.locator('#stat-project').inner_text(),'Delete project failed')
+def check_snapshot_management(p):
+    screen(p,'workspace')
+    current=p.locator('#active-file').inner_text()
+    p.locator('#code-editor').fill('SNAPSHOT_BASELINE')
+    approve(p,'QA initial checkpoint')
+    p.locator('#snapshot-project').click()
+    verify(p.locator('#snapshot-select').input_value()!='','P23 new snapshot not selected')
+    p.locator('#code-editor').fill('SNAPSHOT_MODIFIED')
+    p.locator('#snapshot-action').select_option('compare')
+    p.locator('#snapshot-action-run').click()
+    verify(current in p.locator('#snapshot-comparison').inner_text(),'P23 modified file not in comparison')
+    verify('Modified since snapshot (1)' in p.locator('#snapshot-comparison').inner_text(),'P23 comparison counts incorrect')
+    p.locator('#snapshot-action').select_option('pin')
+    p.locator('#snapshot-action-run').click()
+    verify('Unpin snapshot' in p.locator('#snapshot-action').inner_text(),'P23 pin state not retained')
+    p.locator('#snapshot-action').select_option('rename')
+    approve(p,'QA revised checkpoint')
+    p.locator('#snapshot-action-run').click()
+    verify('QA revised checkpoint' in p.locator('#snapshot-select').inner_text(),'P23 rename failed')
+    p.locator('#snapshot-action').select_option('export')
+    with p.expect_download() as saved:p.locator('#snapshot-action-run').click()
+    payload=json.loads(Path(saved.value.path()).read_text())
+    verify(payload['format']=='mm-platform-snapshot-v1','P23 export format invalid')
+    verify(payload['files'][current]=='SNAPSHOT_BASELINE','P23 export did not preserve original file bytes')
+    p.locator('#snapshot-action').select_option('delete')
+    approve(p)
+    p.locator('#snapshot-action-run').click()
+    verify(p.locator('#snapshot-select option').count()==1,'P23 snapshot deletion failed')
+    verify('SNAPSHOT_MODIFIED' in p.locator('#code-editor').input_value(),'P23 deletion altered active project')
+    verify(p.locator('#snapshot-action-run').is_disabled(),'P23 management must require selection')
+
 def check_html_preview(p):
     screen(p,'workspace')
     p.locator('#file-tree .file-entry[title="index.html"]').click()
@@ -394,6 +425,7 @@ def check_mobile(p):
 CASES=[
  ('12-screen navigation and command palette',check_navigation),
  ('Workspace projects, files, runner, snapshots, JSON ZIP and import/export',check_workspace),
+ ('P23 snapshot compare, pin, rename, export and safe deletion',check_snapshot_management),
  ('Isolated HTML preview tabs',check_html_preview),
  ('Eight provider directory records and setup navigation',check_providers),
  ('Vault locked typing, encryption, persistence, wrong password, removal and wipe',check_vault),
