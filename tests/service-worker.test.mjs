@@ -44,7 +44,7 @@ test('D16: offline refresh reports cache update failure',async()=>{
 });
 
 test('P31: activation removes this app obsolete cache but preserves other sites',async()=>{
- const h=harness({existingCaches:['other-app-assets','mm-studio-shell-b03-3','mm-studio-shell-b03-4','mm-studio-shell-b03-5','mm-studio-shell-b03-6','mm-studio-shell-b03-7']});
+ const h=harness({existingCaches:['other-app-assets','mm-studio-shell-b03-3','mm-studio-shell-b03-4','mm-studio-shell-b03-5','mm-studio-shell-b03-6','mm-studio-shell-b03-7','mm-studio-shell-b03-8']});
  await h.activate();
- assert.deepEqual(h.deleted,['mm-studio-shell-b03-3','mm-studio-shell-b03-4','mm-studio-shell-b03-5','mm-studio-shell-b03-6']);
+ assert.deepEqual(h.deleted,['mm-studio-shell-b03-3','mm-studio-shell-b03-4','mm-studio-shell-b03-5','mm-studio-shell-b03-6','mm-studio-shell-b03-7']);
 });

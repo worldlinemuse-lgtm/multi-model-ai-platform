@@ -163,6 +163,26 @@ def check_html_preview(p):
     verify(p.locator('#console-pane').is_visible(),'Console tab failed')
     p.locator('#show-preview').click()
     verify(p.locator('#preview-pane').is_visible(),'Preview tab failed')
+def check_linked_preview(p):
+    screen(p,'workspace')
+    def add(name,source):
+        approve(p,name)
+        p.locator('#add-file').click()
+        p.locator('#code-editor').fill(source)
+    add('assets/helper.js','window.LINKED_PREVIEW_VALUE = "RESOLVED";')
+    add('assets/finish.js','document.querySelector("#linked-result").textContent = window.LINKED_PREVIEW_VALUE;')
+    add('styles/linked.css','#linked-result { color: rgb(7, 8, 9); }')
+    add('unused.js','throw Error("UNREFERENCED_JS_SHOULD_NOT_RUN");')
+    p.locator('#file-tree .file-entry[title="index.html"]').click()
+    p.locator('#code-editor').fill('<link rel="stylesheet" href="styles/linked.css"><div id="linked-result">Waiting</div><script src="assets/helper.js"></script><script src="assets/finish.js"></script><script src="https://evil.example/never.js"></script>')
+    p.locator('#preview-page').click()
+    linked=p.frame_locator('#preview-host iframe')
+    expect(linked.locator('#linked-result')).to_have_text('RESOLVED',timeout=12000)
+    verify(linked.locator('script[data-local-src]').count()==2,'P04 preview did not use exactly the declared scripts')
+    verify(linked.locator('style[data-local-href]').count()==1,'P04 stylesheet reference not inlined')
+    color=linked.locator('#linked-result').evaluate('(node)=>getComputedStyle(node).color')
+    verify(color=='rgb(7, 8, 9)','P04 CSS was not applied at declared reference')
+    verify('external reference blocked' in p.locator('#toast').inner_text(),'P04 external script omission not explained')
 def check_providers(p):
     screen(p,'providers')
     verify(p.locator('.provider-card').count()==8,'Not eight provider cards')
@@ -487,6 +507,7 @@ CASES=[
  ('P13 nested explorer and collision-safe folder relocation',check_folder_management),
  ('P23 snapshot compare, pin, rename, export and safe deletion',check_snapshot_management),
  ('Isolated HTML preview tabs',check_html_preview),
+ ('P04 linked local CSS and classic scripts in original order',check_linked_preview),
  ('Eight provider directory records and setup navigation',check_providers),
  ('Vault locked typing, encryption, persistence, wrong password, removal and wipe',check_vault),
  ('Mocked API adapter through chat, history, audit and export',check_chat),

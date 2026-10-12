@@ -30,7 +30,9 @@ There are 60 baseline items: 17 D, 33 P and 10 N. This tracker is a **post-basel
 
 - **P31 (partial) / PR #7 / main `60cfcefe064b022d4400269aee75bccc115494df`:** isolated application-specific offline caches; real warm-offline reload and local Data Lab/navigation tests. GitHub post-merge run `38300929801` passed checks, deployment and hosted acceptance. Offline cold-start and update-conflict scenarios remain open.
 
-- **P13 (partial) branch-only:** virtual Code Studio folder tree, controlled atomic folder moves including active-file updates; no OS filesystem or binary asset support. Pending CI and hosted verification.
+- **P13 (partial) / PR #9 / main `5d4c9cff6bf5eac2ddeb1799b410c199a8385f89`:** nested virtual folder tree and collision-safe whole-folder moves; user-confirmed source updates. Post-merge production run `38308404258`: checks, deploy, hosted Chromium **SUCCESS**. Copy/multi-select/project-wide refactoring remains open.
+
+- **P04 (partial) / current branch only:** local HTML preview now resolves referenced CSS and classic JS in document order; external paths, project-root traversal, unreferenced and unsupported module scripts are not loaded. Tests and hosted verification pending. Relative binary images, module imports and HTML-wide bundling remain open.
 
 ## Acceptance / security constraints
 
