@@ -1,3 +1,4 @@
+import {MAX_SAVED_DATASETS,MAX_SAVED_DATASET_CHARS,validateSavedDatasets,transformDataset,serializeDataset} from './data-tools.js';
 export function parseCSV(text){const rows=[];let row=[],value='',quoted=false;for(let i=0;i<text.length;i++){const c=text[i];if(quoted){if(c==='"'&&text[i+1]==='"'){value+='"';i++;}else if(c==='"')quoted=false;else value+=c;}else if(c==='"')quoted=true;else if(c===','){row.push(value);value='';}else if(c==='\n'){row.push(value.replace(/\r$/,''));if(row.some(x=>x.trim()))rows.push(row);row=[];value='';}else value+=c;}if(quoted)throw Error('Unclosed quoted CSV field');row.push(value.replace(/\r$/,''));if(row.some(x=>x.trim()))rows.push(row);if(!rows.length)throw Error('Empty dataset');const columns=rows.shift().map((x,i)=>x||`Column ${i+1}`);if(columns.length>50||rows.length>3000)throw Error('Limit: 50 columns, 3,000 rows');return {columns,records:rows.map(r=>Object.fromEntries(columns.map((col,i)=>[col,r[i]??''])))};}
 export function parseDataset(text){if(!text||text.length>2_000_000)throw Error('Dataset must be under 2 MB');const t=text.trim();if(t.startsWith('[')||t.startsWith('{')){const v=JSON.parse(t);const arr=Array.isArray(v)?v:Array.isArray(v.data)?v.data:[v];if(arr.length>3000)throw Error('Maximum 3,000 JSON rows');const records=arr.map(x=>typeof x==='object'&&x!==null&&!Array.isArray(x)?x:{value:x});const columns=Array.from(new Set(records.flatMap(x=>Object.keys(x)))).slice(0,50);return {columns,records};}return parseCSV(t);}
 export function numericValue(value){
@@ -8,12 +9,82 @@ export function numericValue(value){
  return Number.isFinite(converted)?converted:null;
 }
 export function analyzeDataset(parsed){const {columns,records}=parsed;const numeric=columns.filter(col=>records.some(row=>numericValue(row[col])!==null));const stats={};for(const col of numeric){const arr=records.map(row=>numericValue(row[col])).filter(n=>n!==null);if(arr.length)stats[col]={count:arr.length,min:Math.min(...arr),max:Math.max(...arr),mean:arr.reduce((a,b)=>a+b,0)/arr.length};}return {rows:records.length,columns:columns.length,numeric,stats};}
-export function setupLabs({el,toast,download}){
- let parsed=null,selectedImage=null,selectedNote='',activeRecognition=null,tablePage=0,chartPage=0;const $=el;
+export function setupLabs({el,toast,download,getDatasets=()=>[],commitDatasets=async()=>{throw Error('Workspace persistence is not configured');}}){
+ let parsed=null,selectedImage=null,selectedNote='',activeRecognition=null,tablePage=0,chartPage=0,undoSource=null;const $=el;
+ function refreshSavedDatasets(){
+  const selected=$('data-saved').value,items=getDatasets(),control=$('data-saved');
+  control.replaceChildren(new Option(items.length?'Choose saved dataset…':'No saved datasets',''));
+  for(const item of items)control.add(new Option(item.title,item.id));
+  if(items.some(item=>item.id===selected))control.value=selected;
+  $('data-load').disabled=!control.value;$('data-delete').disabled=!control.value;
+ }
+ function renderTransformFields(){
+  const select=$('data-transform-field'),prior=select.value;
+  select.replaceChildren(new Option('Choose column…',''));
+  if(parsed){for(const col of parsed.columns)select.add(new Option(col,col));}
+  if(parsed?.columns.includes(prior))select.value=prior;
+  else if(parsed?.columns.length)select.value=parsed.columns[0];
+  const valid=!!parsed && parsed.columns.length>0;
+  $('data-transform-apply').disabled=!valid;
+  $('data-transform-undo').disabled=undoSource===null;
+ }
  function renderTable(){const host=$('data-table');host.replaceChildren();if(!parsed){$('data-table-status').textContent='No table data';return;}const total=parsed.records.length,pages=Math.max(1,Math.ceil(total/25));tablePage=Math.max(0,Math.min(tablePage,pages-1));$('data-table-status').textContent=`Rows ${total?tablePage*25+1:0}–${Math.min(total,(tablePage+1)*25)} of ${total} · ${parsed.columns.length} columns`;$('data-table-prev').disabled=tablePage===0;$('data-table-next').disabled=tablePage>=pages-1;const table=document.createElement('table'),head=document.createElement('thead'),header=document.createElement('tr');for(const column of parsed.columns){const th=document.createElement('th');th.textContent=column;header.append(th);}head.append(header);table.append(head);const body=document.createElement('tbody');for(const row of parsed.records.slice(tablePage*25,(tablePage+1)*25)){const tr=document.createElement('tr');for(const col of parsed.columns){const td=document.createElement('td');td.textContent=typeof row[col]==='object'?JSON.stringify(row[col]).slice(0,100):String(row[col]??'').slice(0,120);tr.append(td);}body.append(tr);}table.append(body);host.append(table);}
  function drawChart(){const canvas=$('data-chart'),ctx=canvas.getContext('2d');canvas.width=900;canvas.height=470;ctx.fillStyle='#0b1426';ctx.fillRect(0,0,900,470);if(!parsed){$('data-chart-status').textContent='No chart data';return;}const total=parsed.records.length,pages=Math.max(1,Math.ceil(total/15));chartPage=Math.max(0,Math.min(chartPage,pages-1));$('data-chart-status').textContent=`Chart rows ${total?chartPage*15+1:0}–${Math.min(total,(chartPage+1)*15)} of ${total}`;$('data-chart-prev').disabled=chartPage===0;$('data-chart-next').disabled=chartPage>=pages-1;const col=$('data-axis').value;if(!col)return;const labels=parsed.records.slice(chartPage*15,(chartPage+1)*15).map((r,i)=>String(Object.values(r)[0]??`#${i+1}`).slice(0,9)),nums=parsed.records.slice(chartPage*15,(chartPage+1)*15).map(r=>numericValue(r[col]));if(!nums.length)return;const available=nums.filter(v=>v!==null);if(!available.length)return;const lo=Math.min(0,...available),hi=Math.max(0,...available);const range=Math.max(1,hi-lo),top=30,bottom=414,left=55,right=860;ctx.strokeStyle='#64748b';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(left,top);ctx.lineTo(left,bottom);ctx.lineTo(right,bottom);ctx.stroke();ctx.font='16px ui-monospace, monospace';ctx.fillStyle='#b9cbe3';for(let i=0;i<5;i++){const y=bottom-(i/4)*(bottom-top);const v=lo+(i/4)*range;ctx.fillText(v.toFixed(1),6,y+5);ctx.strokeStyle='#243854';ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(right,y);ctx.stroke();}const width=(right-left)/nums.length;nums.forEach((v,i)=>{if(v===null)return;const y0=bottom-(0-lo)/range*(bottom-top),y1=bottom-(v-lo)/range*(bottom-top),barx=left+width*i+Math.min(12,width*.1),barwidth=width-Math.min(20,width*.2);ctx.fillStyle='#76d3ef';ctx.fillRect(barx,Math.min(y0,y1),barwidth,Math.max(2,Math.abs(y0-y1)));ctx.save();ctx.translate(barx+barwidth/2,450);ctx.rotate(-Math.PI/6);ctx.fillStyle='#a9b8d0';ctx.font='12px ui-monospace, monospace';ctx.textAlign='right';ctx.fillText(labels[i],0,0);ctx.restore();});}
- function doAnalyze(){try{parsed=parseDataset($('data-input').value);tablePage=0;chartPage=0;const report=analyzeDataset(parsed);$('data-status').textContent=`${report.rows} rows × ${report.columns} columns\nNumeric fields: ${report.numeric.join(', ')||'none'}\n`+Object.entries(report.stats).map(([k,v])=>`${k}: min ${v.min.toFixed(2)}, max ${v.max.toFixed(2)}, mean ${v.mean.toFixed(2)}`).join('\n');const axis=$('data-axis');axis.replaceChildren();for(const col of report.numeric)axis.add(new Option(col,col));if(!report.numeric.length)axis.add(new Option('No numeric fields',''));renderTable();drawChart();toast('Local dataset analyzed.');}catch(e){parsed=null;tablePage=0;chartPage=0;$('data-status').textContent='Analysis failed: '+e.message;$('data-axis').replaceChildren(new Option('No numeric fields',''));renderTable();drawChart();toast('Analysis failed: '+e.message,true);}}
+ function doAnalyze(){try{parsed=parseDataset($('data-input').value);tablePage=0;chartPage=0;const report=analyzeDataset(parsed);$('data-status').textContent=`${report.rows} rows × ${report.columns} columns\nNumeric fields: ${report.numeric.join(', ')||'none'}\n`+Object.entries(report.stats).map(([k,v])=>`${k}: min ${v.min.toFixed(2)}, max ${v.max.toFixed(2)}, mean ${v.mean.toFixed(2)}`).join('\n');const axis=$('data-axis');axis.replaceChildren();for(const col of report.numeric)axis.add(new Option(col,col));if(!report.numeric.length)axis.add(new Option('No numeric fields',''));renderTransformFields();renderTable();drawChart();toast('Local dataset analyzed.');}catch(e){parsed=null;tablePage=0;chartPage=0;$('data-status').textContent='Analysis failed: '+e.message;$('data-axis').replaceChildren(new Option('No numeric fields',''));renderTransformFields();renderTable();drawChart();toast('Analysis failed: '+e.message,true);}}
  $('data-analyze').addEventListener('click',doAnalyze);$('data-axis').addEventListener('change',()=>{chartPage=0;drawChart();});$('data-table-prev').addEventListener('click',()=>{if(parsed&&tablePage>0){tablePage--;renderTable();}});$('data-table-next').addEventListener('click',()=>{if(parsed&&tablePage+1<Math.ceil(parsed.records.length/25)){tablePage++;renderTable();}});$('data-chart-prev').addEventListener('click',()=>{if(parsed&&chartPage>0){chartPage--;drawChart();}});$('data-chart-next').addEventListener('click',()=>{if(parsed&&chartPage+1<Math.ceil(parsed.records.length/15)){chartPage++;drawChart();}});$('data-import').addEventListener('change',async e=>{const f=e.target.files?.[0];e.target.value='';if(!f)return;if(f.size>2_000_000)return toast('Dataset too large.',true);$('data-input').value=await f.text();doAnalyze();});$('data-export').addEventListener('click',()=>download('data-export.txt',$('data-input').value,'text/plain'));
+ $('data-saved').addEventListener('change',refreshSavedDatasets);
+ $('data-save').addEventListener('click',async()=>{
+  try{
+   parseDataset($('data-input').value);
+   const content=$('data-input').value;
+   if(content.length>MAX_SAVED_DATASET_CHARS)throw Error('Save limit: 500,000 characters. Export a larger dataset as a file.');
+   const title=prompt('Name this local dataset:','Data Lab dataset');
+   if(title===null)return;
+   const name=title.trim().slice(0,90);
+   if(!name)throw Error('Dataset name cannot be empty.');
+   const previous=getDatasets(),existing=previous.find(x=>x.title.toLocaleLowerCase()===name.toLocaleLowerCase());
+   if(existing&&!confirm('Replace saved dataset "'+existing.title+'"? This cannot be undone.'))return;
+   if(!existing&&previous.length>=MAX_SAVED_DATASETS)throw Error('8 saved datasets maximum. Export or delete one before saving another.');
+   const entry={id:existing?.id||'dataset-'+crypto.randomUUID(),title:name,content,created:new Date().toISOString()};
+   const next=existing?previous.map(item=>item.id===existing.id?entry:item):[...previous,entry];
+   if(!validateSavedDatasets(next))throw Error('Workspace dataset storage is full (2 million total characters).');
+   await commitDatasets(next);
+   refreshSavedDatasets();
+   $('data-saved').value=entry.id;refreshSavedDatasets();
+   toast('Named dataset saved into the local workspace and full backups.');
+  }catch(error){toast('Dataset save failed: '+error.message,true);}
+ });
+ $('data-load').addEventListener('click',()=>{
+  const item=getDatasets().find(x=>x.id===$('data-saved').value);
+  if(!item)return toast('Choose a saved dataset.',true);
+  if($('data-input').value.trim()&&!confirm('Replace the current working input with "'+item.title+'"? Export or save unsaved edits first.'))return;
+  $('data-input').value=item.content;undoSource=null;doAnalyze();toast('Saved dataset loaded locally.');
+ });
+ $('data-delete').addEventListener('click',async()=>{
+  const item=getDatasets().find(x=>x.id===$('data-saved').value);
+  if(!item)return toast('Choose a saved dataset.',true);
+  if(!confirm('Permanently delete saved dataset "'+item.title+'"? Full backups previously exported are unchanged.'))return;
+  try{await commitDatasets(getDatasets().filter(x=>x.id!==item.id));refreshSavedDatasets();toast('Saved dataset deleted.');}
+  catch(e){toast('Dataset deletion failed: '+e.message,true);}
+ });
+ $('data-transform').addEventListener('change',()=>{$('data-transform-value').disabled=['sort-asc','sort-desc','dedupe'].includes($('data-transform').value);});
+ $('data-transform-apply').addEventListener('click',()=>{
+  try{
+   if(!parsed)throw Error('Analyze data first.');
+   const operation=$('data-transform').value,column=$('data-transform-field').value,value=$('data-transform-value').value;
+   const result=transformDataset(parsed,{operation,column,value});
+   const output=serializeDataset(result);
+   if(output.length>2_000_000)throw Error('Transformed dataset exceeds the 2 MB limit.');
+   const old=$('data-input').value;
+   $('data-input').value=output;undoSource=old;doAnalyze();
+   toast('Local transformation applied ('+result.records.length+' rows). Undo is available.');
+  }catch(error){toast('Transformation failed: '+error.message,true);}
+ });
+ $('data-transform-undo').addEventListener('click',()=>{
+  if(undoSource===null)return;
+  const source=undoSource;undoSource=null;
+  $('data-input').value=source;doAnalyze();toast('Last transformation undone.');
+ });
  $('data-wasm-test').addEventListener('click',async()=>{try{const bytes=new Uint8Array([0,97,115,109,1,0,0,0,1,7,1,96,2,127,127,1,127,3,2,1,0,7,7,1,3,97,100,100,0,0,10,9,1,7,0,32,0,32,1,106,11]);const instance=await WebAssembly.instantiate(bytes);const sum=instance.instance.exports.add(20,22);$('data-status').textContent=`WebAssembly execution: PASS\n20 + 22 = ${sum}\nNative browser WebAssembly runtime is available.`;toast('WebAssembly test passed.');}catch(e){toast('WebAssembly failed: '+e.message,true)}});
  const canvas=$('media-canvas'),ctx=canvas.getContext('2d');function redrawImage(){if(!selectedImage)return;const w=selectedImage.width,h=selectedImage.height,scale=Math.min(1,1600/w,1600/h);canvas.width=Math.max(1,Math.round(w*scale));canvas.height=Math.max(1,Math.round(h*scale));$('media-resolution-status').textContent=`Preview: ${canvas.width} × ${canvas.height}px · Original: ${w} × ${h}px${scale<1?' (preview reduced to fit)':''}. Choose your export resolution below.`;ctx.clearRect(0,0,canvas.width,canvas.height);ctx.filter=`brightness(${$('media-brightness').value}%) contrast(${$('media-contrast').value}%) saturate(${$('media-saturation').value}%)`;ctx.drawImage(selectedImage,0,0,canvas.width,canvas.height);ctx.filter='none';}
  $('media-image').addEventListener('change',e=>{const f=e.target.files?.[0];e.target.value='';if(!f)return;if(f.size>8_000_000)return toast('Image limit is 8MB.',true);const url=URL.createObjectURL(f),img=new Image();img.onload=()=>{URL.revokeObjectURL(url);selectedImage=img;redrawImage();toast('Image loaded locally.');};img.onerror=()=>{URL.revokeObjectURL(url);toast('Unable to read image.',true)};img.src=url;});for(const id of ['media-brightness','media-contrast','media-saturation'])$(id).addEventListener('input',redrawImage);
@@ -40,4 +111,6 @@ export function setupLabs({el,toast,download}){
  recognition.onend=()=>{if(activeRecognition===recognition){activeRecognition=null;$('speech-status').textContent='Dictation ended.';}};
  try{activeRecognition=recognition;recognition.start();$('speech-status').textContent='Listening; microphone permission may be requested.';}catch(e){activeRecognition=null;toast('Dictation could not start: '+e.message,true);}
 });
+ refreshSavedDatasets();renderTransformFields();
+ return {refreshSavedDatasets};
 }
