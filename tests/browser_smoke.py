@@ -54,7 +54,7 @@ def main():
             print('NAV OPEN SNAPSHOT:',page.evaluate("() => ({ sidebar: document.querySelector('#sidebar').className, menuExpanded: document.querySelector('#mobile-menu').getAttribute('aria-expanded'), backdropHidden: document.querySelector('#nav-backdrop').hidden, activeView: document.querySelector('#current-view-label').textContent })"),flush=True)
             page.wait_for_function("document.querySelector('#sidebar').classList.contains('open')",timeout=10000)
             page.locator('#sidebar-close').click()
-            page.wait_for_function("document.querySelector('#sidebar').classList.contains('open')",timeout=10000)
+            page.wait_for_function("!document.querySelector('#sidebar').classList.contains('open')",polling=100,timeout=10000)
             checkpoint('JavaScript errors')
             if errors:
                 raise AssertionError('Uncaught browser page errors: '+repr(errors))
