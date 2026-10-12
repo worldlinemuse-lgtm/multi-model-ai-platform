@@ -10,7 +10,7 @@ permissions:
   pages: write
   id-token: write
 concurrency:
-  group: pages
+  group: pages-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'main' }}
   cancel-in-progress: true
 jobs:
   checks:
@@ -31,6 +31,7 @@ jobs:
           python -m pip install playwright==1.57.0
           python -m playwright install --with-deps chromium
       - name: Real Chromium browser smoke acceptance (local checkout)
+        timeout-minutes: 12
         run: |
           set -euo pipefail
           python -m http.server 8000 --bind 127.0.0.1 > /tmp/mm-studio-http.log 2>&1 &
@@ -40,11 +41,12 @@ jobs:
             if curl --fail --silent --head http://127.0.0.1:8000/ >/dev/null; then break; fi
             sleep 1
           done
-          python tests/browser_smoke.py --base-url http://127.0.0.1:8000
-          python tests/browser_regression.py --base-url http://127.0.0.1:8000
-          python tests/full_site_browser.py --base-url http://127.0.0.1:8000
+          python -u tests/browser_smoke.py --base-url http://127.0.0.1:8000
+          python -u tests/browser_regression.py --base-url http://127.0.0.1:8000
+          python -u tests/full_site_browser.py --base-url http://127.0.0.1:8000
   deploy:
     if: github.event_name != 'pull_request'
+    timeout-minutes: 15
     needs: checks
     runs-on: ubuntu-latest
     outputs:
@@ -79,8 +81,9 @@ jobs:
           python -m pip install playwright==1.57.0
           python -m playwright install --with-deps chromium
       - name: Real Chromium acceptance on public GitHub Pages
+        timeout-minutes: 12
         run: |
           set -euo pipefail
-          python tests/browser_smoke.py --base-url "$DEPLOYED_URL"
-          python tests/browser_regression.py --base-url "$DEPLOYED_URL"
-          python tests/full_site_browser.py --base-url "$DEPLOYED_URL"
+          python -u tests/browser_smoke.py --base-url "$DEPLOYED_URL"
+          python -u tests/browser_regression.py --base-url "$DEPLOYED_URL"
+          python -u tests/full_site_browser.py --base-url "$DEPLOYED_URL"
