@@ -115,6 +115,7 @@ def test_workspace_editor(page,context):
     assert page.locator('#console-output').inner_text()==''
     page.locator('#preview-page').click()
     child=page.frame_locator('#preview-host iframe')
+    child.get_by_text('Hello from the browser workbench!').wait_for(state='visible',timeout=10000)
     assert child.get_by_text('Hello from the browser workbench!').count()==1
     child.get_by_role('button',name='Test interaction').click()
     assert child.locator('#result').inner_text()=='It works!'
