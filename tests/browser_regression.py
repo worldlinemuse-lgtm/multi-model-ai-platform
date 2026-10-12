@@ -11,8 +11,8 @@ def main():
  with sync_playwright() as pw:
   browser=pw.chromium.launch(headless=True,args=['--no-sandbox'])
   def fresh():
-   context=browser.new_context(accept_downloads=True)
-   page=context.new_page(viewport={'width':1320,'height':850})
+   context=browser.new_context(accept_downloads=True,viewport={'width':1320,'height':850})
+   page=context.new_page()
    errors=[];page.on('pageerror',lambda exc:errors.append(str(exc)))
    page.goto(args.base_url,timeout=25000)
    page.locator('#view-overview h1').wait_for(timeout=16000)
