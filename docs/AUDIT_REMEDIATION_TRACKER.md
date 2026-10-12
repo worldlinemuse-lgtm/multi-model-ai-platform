@@ -12,17 +12,22 @@ There are 60 baseline items: 17 D, 33 P and 10 N. This tracker is a **post-basel
 - **PR #3 / main `2e310160e9c0fb50eefe6946a006c799ab521938`:** P14 local conversation search, selected-thread export/deletion, local user-message editing, retention warnings. Post-merge run `38280143553`: SUCCESS. P14 remains **partial** as full message-editing semantics and every history edge case are not certified.
 - **D14** misleading capability copy corrected in earlier batch. History searching and local user-message editing were later added with PR #3. **P21** misleading `TERMINAL` label corrected only; a real shell is *not* implemented.
 
-## Merged code with separate hosted acceptance not yet passing
+## PR #4 code verified after hosted CI repair
 
 - **PR #4 / main `acf9b3dcd8e03f0e054860f1e749357bbfe5e54e`:** P16 partial cross-project keyword search and live source resolution; P28 partial explicit provider request deadline/AbortController behavior (no automatic retries). Branch run `38280578428`: SUCCESS.
-- PR #4 post-merge run `38280806433`: unit/browser checkout and deploy succeeded; `hosted-acceptance` **FAILED** at the public browser smoke with no diagnostic detail in the old test. Therefore PR #4 must not be marked fully hosted verified.
-- Follow-up PR adds awaited browser assertions and stage diagnostics, scoped workflow concurrency, and bounded CI jobs. Its merge, deployment and hosted acceptance remain pending until independently confirmed.
+- PR #4 post-merge run `38280806433` failed public browser smoke despite successful checkout checks and deploy. It was **superseded by PR #5's fully passing post-merge run**. The old failed run is retained for audit evidence.
+- **PR #5 / main `a6deabef4e387b5618b186727dbc22318373cf06`:** hosted smoke steps now have bounded state checks and diagnostic tracebacks; CI separates PR and production concurrency. Post-merge run `38299182398`: checks, deploy and hosted-acceptance all **SUCCESS**. P16 and P28 behavior are accepted at their stated partial scope; live API accounts remain untested.
 
 ## Remaining partial or open P items
 
 - **Partially addressed:** P14 (conversation management), P16 (keyword cross-project search; no semantic index), P17 (pagination; no advanced drilldown), P21 (truthful label only, no actual REPL), P28 (timeout; broader diagnostics/retry design still missing), P33 (broad mocked GUI test coverage; not every control/provider/device).
 - **Other open P items:** P01, P02, P03, P04, P05, P06, P08, P09, P10, P11, P12, P13, P15, P18, P19, P20, P22, P23, P24, P25, P26, P27, P29, P30, P31.
 - **Genuinely unimplemented:** N01–N10 (search/retrieval tools, on-device LLM, in-website GitHub sync, extensible adapters, real quota routing, remote modalities, multi-device collaboration, persistent agents, other language runtimes, PDF/DOCX extraction).
+
+## Current workstream pending independent CI
+- **P23 (partial) / PR #6 / main `85696a92edd5f0b21a2e09a316b812496464f769`:** snapshot rename, file-status comparison, importable JSON export, pin/unpin, confirmed delete and eviction warning. Full line diff not implemented. GitHub post-merge run `38300179740`: checks, deployment and hosted acceptance **SUCCESS**.
+
+- **P31 (partial) / PR #7 pending:** isolate service-worker cache eviction to this project's cache prefix, use only the active cache for offline fallback, and test first-online-then-offline reload and local operations on Chromium. Does not certify offline cold-start, cross-device updates or interrupted downloads. Branch checks passed on an earlier head; new tracker commit still requires CI.
 
 ## Acceptance / security constraints
 
