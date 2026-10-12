@@ -32,7 +32,9 @@ There are 60 baseline items: 17 D, 33 P and 10 N. This tracker is a **post-basel
 
 - **P13 (partial) / PR #9 / main `5d4c9cff6bf5eac2ddeb1799b410c199a8385f89`:** nested virtual folder tree and collision-safe whole-folder moves; user-confirmed source updates. Post-merge production run `38308404258`: checks, deploy, hosted Chromium **SUCCESS**. Copy/multi-select/project-wide refactoring remains open.
 
-- **P04 (partial) / current branch only:** local HTML preview now resolves referenced CSS and classic JS in document order; external paths, project-root traversal, unreferenced and unsupported module scripts are not loaded. Tests and hosted verification pending. Relative binary images, module imports and HTML-wide bundling remain open.
+- **P04 (partial) / PR #10 / main `dd1d84e9cc49e6f83573fcd2b6ae151db8e0a8fb`:** local HTML preview resolves only referenced CSS and classic JS in order, with relative paths and clear blocked/missing asset warnings. Branch checks PASSED; public run `38317094795` pending hosted acceptance at this checkpoint. Relative binary assets, module imports and bundling remain open.
+
+- **P02 (branch-only):** real Pyodide worker execution acceptance in Chromium against both checkout and public hosted origin, with 120-second explicit cap and truthful runtime state. Pending branch CI and actual CDN evidence; no result may be reported as verified prematurely.
 
 ## Acceptance / security constraints
 
