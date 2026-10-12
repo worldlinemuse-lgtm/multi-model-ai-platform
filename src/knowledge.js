@@ -8,6 +8,6 @@ export function parseNoteArchive(text){
  if(!legacy && (!value||value.format!==NOTES_FORMAT))return null;
  const notes=legacy?value:value.notes;
  if(!Array.isArray(notes)||notes.length>MAX_NOTES)throw Error('Note archive must contain at most '+MAX_NOTES+' notes');
- if(!notes.every(n=>n&&typeof n==='object'&&!Array.isArray(n)&&typeof n.title==='string'&&n.title.length<=150&&typeof n.content==='string'&&n.content.length<=100000&&typeof n.created==='string'&&n.created.length<=80&&typeof n.id==='string'&&n.id.length<=140))throw Error('Note archive has invalid record fields');
- return notes.map(n=>({title:n.title,content:n.content,created:n.created}));
+ if(!notes.every(n=>n&&typeof n==='object'&&!Array.isArray(n)&&typeof n.title==='string'&&n.title.length<=150&&typeof n.content==='string'&&n.content.length<=100000&&typeof n.created==='string'&&n.created.length<=80&&typeof n.id==='string'&&n.id.length<=140&&(n.updated===undefined||(typeof n.updated==='string'&&n.updated.length<=80))))throw Error('Note archive has invalid record fields');
+ return notes.map(n=>({...{title:n.title,content:n.content,created:n.created},...(n.updated===undefined?{}:{updated:n.updated})}));
 }
