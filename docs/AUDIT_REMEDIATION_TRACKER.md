@@ -20,7 +20,8 @@ This tracks the 60 original audit IDs without silently counting a partially fixe
 
 - **D items:** none other than the in-flight D09, assuming preceding shipped versions stay valid.
 - **Explicit open/partial list:** P01, P02, P03, P04, P05, P06, P08, P09, P10, P11, P12, P13, P14, P15, P16, P18, P19, P20, P21, P22, P23, P24, P25, P26, P27, P28, P29, P30, P31, P33.
-- **P17** awaits current branch validation. **P07/P32** closed at their documented B0.3.3 scope.
+- **P17** implemented in merged PR #2; deployment verification must be confirmed separately. **P07/P32** closed at their documented B0.3.3 scope.
+- **P14** follow-up branch adds search, single-thread export/deletion, local user-message editing and warnings on limits; still pending CI, and assistant-output editing is intentionally withheld to preserve response provenance.
 - **N01–N10** are not built, including research API, on-device LLM, in-app GitHub sync, arbitrary adapters, quota-informed fallback, remote modalities, multi-device sync, autonomous agent layer, other language runtimes and document extraction.
 
 ## User-dependent acceptance gates
