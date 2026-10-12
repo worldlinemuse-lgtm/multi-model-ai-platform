@@ -231,7 +231,7 @@ def check_health_and_data_pages(p):
     screen(p,'datalab')
     columns=['label']+['field'+str(i) for i in range(12)]
     rows=[','.join(['row'+str(i)]+[str(i+j) for j in range(12)]) for i in range(31)]
-    p.locator('#data-input').fill(','.join(columns)+'\\n'+'\\n'.join(rows))
+    p.locator('#data-input').fill(','.join(columns)+'\n'+'\n'.join(rows))
     p.locator('#data-analyze').click()
     verify(p.locator('#data-table thead th').count()==13,'P17 columns beyond 12 not accessible')
     verify(p.locator('#data-table tbody tr').count()==25,'P17 table first page size wrong')
