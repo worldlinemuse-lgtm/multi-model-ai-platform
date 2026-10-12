@@ -261,8 +261,8 @@ def check_settings(p):
     p.locator('#view-settings h1').wait_for(timeout=12000)
     screen(p,'settings')
     verify(p.locator('#accent-select').input_value()=='violet','Preferences not persisted to IndexedDB')
-    approve(p)
-    p.once('dialog',lambda d:d.accept())
+    # Two sequential destructive-action dialogs both need confirmation.
+    p.on('dialog',lambda d:d.accept())
     p.locator('#reset-all').click()
     p.wait_for_function("document.querySelector('#toast').textContent.includes('reset and saved')",timeout=10000)
     verify(p.locator('#accent-select').input_value()!='violet','Reset did not clear preferences')
