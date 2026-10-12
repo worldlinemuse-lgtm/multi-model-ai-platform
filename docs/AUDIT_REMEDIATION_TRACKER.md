@@ -25,7 +25,9 @@ There are 60 baseline items: 17 D, 33 P and 10 N. This tracker is a **post-basel
 - **Genuinely unimplemented:** N01–N10 (search/retrieval tools, on-device LLM, in-website GitHub sync, extensible adapters, real quota routing, remote modalities, multi-device collaboration, persistent agents, other language runtimes, PDF/DOCX extraction).
 
 ## Current workstream pending independent CI
-- **P23 (partial)**: controlled snapshot rename, compare-by-file status, re-importable JSON export, pin/unpin against eviction, explicit deletion, and a confirmation before evicting the oldest unpinned snapshot. Full line-by-line diff is not yet implemented. These changes are branch-only until PR and post-merge hosted checks pass.
+- **P23 (partial) / PR #6 / main `85696a92edd5f0b21a2e09a316b812496464f769`:** snapshot rename, file-status comparison, importable JSON export, pin/unpin, confirmed delete and eviction warning. Full line diff not implemented. GitHub post-merge run `38300179740`: checks, deployment and hosted acceptance **SUCCESS**.
+
+- **P31 (partial) / PR #7 pending:** isolate service-worker cache eviction to this project's cache prefix, use only the active cache for offline fallback, and test first-online-then-offline reload and local operations on Chromium. Does not certify offline cold-start, cross-device updates or interrupted downloads. Branch checks passed on an earlier head; new tracker commit still requires CI.
 
 ## Acceptance / security constraints
 

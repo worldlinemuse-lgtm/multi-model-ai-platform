@@ -44,6 +44,7 @@ jobs:
           python -u tests/browser_smoke.py --base-url http://127.0.0.1:8000
           python -u tests/browser_regression.py --base-url http://127.0.0.1:8000
           python -u tests/full_site_browser.py --base-url http://127.0.0.1:8000
+          python -u tests/offline_acceptance.py --base-url http://127.0.0.1:8000
   deploy:
     if: github.event_name != 'pull_request'
     timeout-minutes: 15
@@ -87,3 +88,4 @@ jobs:
           python -u tests/browser_smoke.py --base-url "$DEPLOYED_URL"
           python -u tests/browser_regression.py --base-url "$DEPLOYED_URL"
           python -u tests/full_site_browser.py --base-url "$DEPLOYED_URL"
+          python -u tests/offline_acceptance.py --base-url "$DEPLOYED_URL"
