@@ -24,6 +24,10 @@ This tracks the 60 original audit IDs without silently counting a partially fixe
 - **P14** follow-up branch adds search, single-thread export/deletion, local user-message editing and warnings on limits; still pending CI, and assistant-output editing is intentionally withheld to preserve response provenance.
 - **N01–N10** are not built, including research API, on-device LLM, in-app GitHub sync, arbitrary adapters, quota-informed fallback, remote modalities, multi-device sync, autonomous agent layer, other language runtimes and document extraction.
 
+## Branch-only follow-up, pending CI
+- **P16 (partial):** Local keyword search spans all locally saved projects; selected project-file previews resolve live content by project ID. Vector/semantic retrieval remains open.
+- **P28 (partial):** Browser provider requests gain a bounded request deadline, caller cancellation and a timeout-specific error; no retries are issued automatically. Real network CORS/credential diagnostics and any opt-in retry/backoff policy remain open.
+
 ## User-dependent acceptance gates
 
 - Real provider credentials, account eligibility, free-tier quotas, consent, service-specific CORS and model availability: do not fake; use secure user-controlled setup.
