@@ -84,6 +84,7 @@ def main():
    page.locator('#knowledge-search').fill('Important reference')
    page.locator('#knowledge-results button').first.click()
    assert 'Reference data: 128' in page.locator('#knowledge-preview').inner_text()
+   page.on('dialog',lambda dialog:dialog.accept())
    page.locator('#knowledge-delete').click()
    print('REGRESSION WAIT 8',flush=True)
    page.wait_for_function("document.querySelector('#note-count').textContent.includes('0')")
