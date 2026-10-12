@@ -249,6 +249,8 @@ def check_settings(p):
     verify(p.locator('body').get_attribute('data-accent')=='violet','Accent preference failed')
     p.locator('#compact-toggle').check()
     verify('compact' in p.locator('body').get_attribute('class'),'Compact setting failed')
+    # IndexedDB writes are debounced; reload only after the UI confirms a durable save.
+    p.wait_for_function("document.querySelector('#save-indicator').textContent === 'Saved on this device'",timeout=10000)
     with p.expect_download() as obj:p.locator('#backup-all').click()
     backup=json.loads(Path(obj.value.path()).read_text())
     verify('projects' in backup and 'threads' in backup and 'preferences' in backup,'Workspace backup incomplete')
