@@ -1,5 +1,6 @@
 /* Read-only browser capability diagnostics. Never request new permissions, fetch remote URLs or claim provider health. */
 const available=(ok)=>ok?'API PRESENT':'NOT AVAILABLE';
+async function limited(promise,ms=3500){let timer;try{return await Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('capability probe deadline')),ms);})]);}finally{clearTimeout(timer);}}
 export async function readBrowserCapabilities(env=globalThis){
  const nav=env.navigator||{},rows=[],add=(id,label,status,detail)=>rows.push({id,label,status,detail});
  const secure=typeof env.isSecureContext==='boolean'?(env.isSecureContext?'SECURE':'INSECURE'):'UNKNOWN';
@@ -18,13 +19,13 @@ export async function readBrowserCapabilities(env=globalThis){
  add('cryptography','Web Crypto SubtleCrypto',available(subtle),'Presence only. Vault encryption has a separate functional test.');
  let persistence='UNKNOWN';
  if(typeof nav.storage?.persisted==='function'){
-  try{persistence=await nav.storage.persisted()?'PERSISTENT STORAGE GRANTED':'PERSISTENCE NOT GUARANTEED';}
+  try{persistence=await limited(nav.storage.persisted())?'PERSISTENT STORAGE GRANTED':'PERSISTENCE NOT GUARANTEED';}
   catch{persistence='UNAVAILABLE TO QUERY';}
  }else persistence='QUERY UNSUPPORTED';
  add('persistence','Persistent-storage grant',persistence,'A denied grant does not mean IndexedDB cannot save; browser may evict data.');
  let mic='UNKNOWN';
  if(typeof nav.permissions?.query==='function'){
-  try{const permission=await nav.permissions.query({name:'microphone'});mic=({granted:'GRANTED',denied:'DENIED',prompt:'PROMPT REQUIRED'})[permission?.state]||'UNKNOWN';}
+  try{const permission=await limited(nav.permissions.query({name:'microphone'}));mic=({granted:'GRANTED',denied:'DENIED',prompt:'PROMPT REQUIRED'})[permission?.state]||'UNKNOWN';}
   catch{mic='QUERY UNSUPPORTED';}
  }else mic='QUERY UNSUPPORTED';
  add('mic-permission','Microphone permission status',mic,'Read-only query; does not request microphone access or record audio.');
