@@ -40,7 +40,7 @@ def main():
             page.locator('#view-overview h1').wait_for(timeout=14000)
             stage='navigate offline and analyze local data'
             page.locator('[data-view="datalab"]').first.click()
-            page.locator('#data-input').fill('label,value\\nAlpha,10\\nBeta,20')
+            page.locator('#data-input').fill(chr(10).join(['label,value','Alpha,10','Beta,20']))
             page.locator('#data-analyze').click()
             page.wait_for_function("() => document.querySelector('#data-status').textContent.includes('mean 15.00')",polling=100,timeout=10000)
             page.locator('[data-view="knowledge"]').first.click()
