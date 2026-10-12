@@ -16,3 +16,16 @@ test('P28 deadline aborts stalled requests once',async()=>{
   assert.equal(attempts,1);
  }finally{globalThis.fetch=original;}
 });
+
+test('P28 respects caller cancellation',async()=>{
+ const original=globalThis.fetch,abort=new AbortController();
+ globalThis.fetch=(_url,options)=>new Promise((resolve,reject)=>{
+  if(options.signal.aborted)return reject(options.signal.reason);
+  options.signal.addEventListener('abort',()=>reject(options.signal.reason),{once:true});
+ });
+ try{
+  const pending=callProvider('openrouter',key,[{role:'user',content:'cancel'}],{signal:abort.signal,timeoutMs:5000});
+  abort.abort();
+  await assert.rejects(pending,e=>e.name==='AbortError');
+ }finally{globalThis.fetch=original;}
+});
