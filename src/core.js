@@ -65,7 +65,8 @@ export const providerById = id => PROVIDERS.find(p=>p.id===id);
 export function safeName(name){return typeof name==='string' && name.length<=100 && /^[\p{L}\p{N}_-][\p{L}\p{N}_.+@ /-]*$/u.test(name) && !name.endsWith('/') && name.split('/').every(part=>part.length>0&&part!=='.'&&part!=='..'&&!part.startsWith('.'));}
 export function safeFiles(files){return files && typeof files==='object'&&!Array.isArray(files) && Object.keys(files).length>0&&Object.keys(files).length<=MAX_FILES&&Object.entries(files).every(([n,v])=>safeName(n)&&typeof v==='string'&&v.length<=MAX_FILE_LENGTH) && Object.values(files).reduce((s,v)=>s+v.length,0)<=MAX_PROJECT_BYTES;}
 export function starterProject(name='First project'){return {id:uid('project'),name,active:'main.js',updated:now(),files:{'main.js':'// Run with ▶ Run code. This runs in an isolated Web Worker.\nconst message = "Hello from Multi-Model Studio!";\nconsole.log(message);\nconsole.log("2 + 2 =", 2 + 2);','index.html':'<!doctype html>\n<html><head><title>My first preview</title></head><body>\n<h1>Hello from the browser workbench!</h1>\n<p>Edit this file and press Preview HTML.</p>\n<button onclick="document.getElementById(\'result\').textContent = \'It works!\'">Test interaction</button>\n<p id="result"></p>\n</body></html>','style.css':'body { font: 16px system-ui; padding: 28px; color: #1d2b43; }\nh1 { color: #4162c6; }\nbutton { background: #4162c6; color: white; border: 0; padding: 10px; border-radius: 8px; }','hello.py':'print("Python is running inside WebAssembly!")\nprint("2 + 2 =", 2 + 2)'}};}
-export function freshState(){const p=starterProject();const thread={id:uid('thread'),title:'New conversation',created:now(),messages:[]};return {format:APP_KEY,projects:[p],activeProjectId:p.id,snapshots:[],threads:[thread],activeThreadId:thread.id,notes:[],audit:[],workflows:[],preferences:{accent:'cyan',compact:false},created:now()};}
+import {validateSavedDatasets} from './data-tools.js';
+export function freshState(){const p=starterProject();const thread={id:uid('thread'),title:'New conversation',created:now(),messages:[]};return {format:APP_KEY,projects:[p],activeProjectId:p.id,snapshots:[],threads:[thread],activeThreadId:thread.id,notes:[],audit:[],workflows:[],datasets:[],preferences:{accent:'cyan',compact:false},created:now()};}
 const record = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const textField = (v,max=100000) => typeof v === 'string' && v.length <= max;
 const idField = v => textField(v,140) && v.length > 0;
@@ -87,6 +88,7 @@ export function validateState(s){
  if(!Array.isArray(s.notes)||s.notes.length>MAX_NOTES||!s.notes.every(validNote)||!uniqueIds(s.notes))return false;
  if(!Array.isArray(s.audit)||s.audit.length>MAX_AUDIT||!s.audit.every(validAudit))return false;
  if(!Array.isArray(s.workflows)||s.workflows.length>40||!s.workflows.every(validWorkflow))return false;
+  if(!validateSavedDatasets(s.datasets))return false;
  return record(s.preferences) && ['cyan','violet','amber'].includes(s.preferences.accent) && typeof s.preferences.compact==='boolean';
 }
 export function historyForRoute(messages,route){

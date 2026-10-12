@@ -14,7 +14,7 @@ from urllib.request import Request, urlopen
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = (
     'index.html', 'styles.css', 'provider-guides.js',
-    'src/main.js', 'src/core.js', 'src/labs.js', 'src/knowledge.js',
+    'src/main.js', 'src/core.js', 'src/labs.js', 'src/data-tools.js', 'src/knowledge.js',
     'src/provider-api.js', 'src/sandbox.js', 'src/storage.js',
     'src/vault.js', 'src/zip.js', 'sw.js', 'favicon.svg',
 )
