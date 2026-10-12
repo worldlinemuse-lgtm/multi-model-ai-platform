@@ -222,6 +222,31 @@ def check_data(p):
     p.locator('#data-analyze').click()
     verify('Analysis failed:' in p.locator('#data-status').inner_text(),'Invalid data not rejected')
     verify(p.locator('#data-table tbody tr').count()==0,'Old data remained after parse error')
+def check_health_and_data_pages(p):
+    screen(p,'overview')
+    health=p.locator('#health-list')
+    verify(health.locator('.health-line').count()==6,'D09 runtime health probes missing')
+    verify('UNVERIFIED' in health.inner_text(),'D09 must not claim provider health without real inference')
+    verify('Browser storage' in health.inner_text(),'D09 storage status missing')
+    screen(p,'datalab')
+    columns=['label']+['field'+str(i) for i in range(12)]
+    rows=[','.join(['row'+str(i)]+[str(i+j) for j in range(12)]) for i in range(31)]
+    p.locator('#data-input').fill(','.join(columns)+'\\n'+'\\n'.join(rows))
+    p.locator('#data-analyze').click()
+    verify(p.locator('#data-table thead th').count()==13,'P17 columns beyond 12 not accessible')
+    verify(p.locator('#data-table tbody tr').count()==25,'P17 table first page size wrong')
+    p.locator('#data-table-next').click()
+    verify(p.locator('#data-table tbody tr').count()==6,'P17 last page missing')
+    verify('26–31 of 31' in p.locator('#data-table-status').inner_text(),'P17 row range incorrect')
+    p.locator('#data-table-prev').click()
+    verify(p.locator('#data-table tbody tr').count()==25,'P17 table previous page not restored')
+    p.locator('#data-chart-next').click()
+    verify('16–30 of 31' in p.locator('#data-chart-status').inner_text(),'P17 chart second page incorrect')
+    p.locator('#data-chart-next').click()
+    verify('31–31 of 31' in p.locator('#data-chart-status').inner_text(),'P17 chart final page missing')
+    p.locator('#data-chart-prev').click()
+    verify('16–30 of 31' in p.locator('#data-chart-status').inner_text(),'P17 chart previous page failed')
+
 def make_png(width=2,height=1):
     def chunk(name,data):return struct.pack('!I',len(data))+name+data+struct.pack('!I',zlib.crc32(name+data)&0xffffffff)
     scan=(b'\x00'+b'\xff\x20\x20\xff'*width)*height
@@ -331,6 +356,7 @@ CASES=[
  ('Knowledge note creation, retrieval, chat insertion and archive roundtrip',check_knowledge),
  ('D13 live knowledge after project-file edits',check_knowledge_freshness),
  ('Data CSV/JSON/WASM/chart/error and export',check_data),
+ ('D09 dynamic health and P17 paginated data/chart coverage',check_health_and_data_pages),
  ('Canvas media adjustments, PNG and speech controls',check_media),
  ('Preferences, backup, restore rejection, persisted settings and reset',check_settings),
  ('Capability inventory truth labels',check_capabilities),
