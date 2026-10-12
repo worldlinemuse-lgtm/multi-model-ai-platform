@@ -277,6 +277,26 @@ def make_png(width=2,height=1):
     def chunk(name,data):return struct.pack('!I',len(data))+name+data+struct.pack('!I',zlib.crc32(name+data)&0xffffffff)
     scan=(b'\x00'+b'\xff\x20\x20\xff'*width)*height
     return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('!IIBBBBB',width,height,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(scan))+chunk(b'IEND',b'')
+def check_cross_project_knowledge(p):
+    screen(p,'workspace')
+    approve(p,'CrossProjectSource')
+    p.locator('#new-project').click()
+    p.locator('#code-editor').fill('P16-CROSS-PROJECT-FIRST')
+    approve(p,'CrossProjectOther')
+    p.locator('#new-project').click()
+    screen(p,'knowledge')
+    p.locator('#knowledge-search').fill('P16-CROSS-PROJECT-FIRST')
+    verify(p.locator('#knowledge-results button').count()==1,'P16 cross-project file not searchable')
+    p.locator('#knowledge-results button').first.click()
+    verify('P16-CROSS-PROJECT-FIRST' in p.locator('#knowledge-preview').inner_text(),'P16 cross-project preview wrong')
+    screen(p,'workspace')
+    p.locator('#project-select').select_option(label='CrossProjectSource')
+    p.locator('#code-editor').fill('P16-CROSS-PROJECT-UPDATED')
+    screen(p,'knowledge')
+    verify('P16-CROSS-PROJECT-UPDATED' in p.locator('#knowledge-preview').inner_text(),'P16 cross-project preview stale')
+    p.locator('#knowledge-to-chat').click()
+    verify('P16-CROSS-PROJECT-UPDATED' in p.locator('#chat-input').input_value(),'P16 cross-project chat insertion stale')
+
 def check_knowledge_freshness(p):
     screen(p,'workspace')
     filename=p.locator('#active-file').inner_text()
@@ -382,6 +402,7 @@ CASES=[
  ('Mocked three-stage workflow and stage cap',check_workflows),
  ('Knowledge note creation, retrieval, chat insertion and archive roundtrip',check_knowledge),
  ('D13 live knowledge after project-file edits',check_knowledge_freshness),
+ ('P16 cross-project knowledge search and live context',check_cross_project_knowledge),
  ('Data CSV/JSON/WASM/chart/error and export',check_data),
  ('D09 dynamic health and P17 paginated data/chart coverage',check_health_and_data_pages),
  ('Canvas media adjustments, PNG and speech controls',check_media),
