@@ -25,7 +25,7 @@ def view(page, name):
 
 
 def toast_has(page, phrase):
-    page.wait_for_function('(s) => document.querySelector("#toast").textContent.includes(s)', phrase, timeout=6000)
+    page.wait_for_function('(s) => document.querySelector("#toast").textContent.includes(s)', arg=phrase, timeout=6000)
 
 
 def save_key(page, provider='groq', model='llama-3.1-8b-instant'):
@@ -122,7 +122,9 @@ def test_workspace_editor(page,context):
     assert page.locator('#console-pane').is_visible()
     page.locator('#show-preview').click()
     assert page.locator('#preview-pane').is_visible()
+    page.locator('#code-editor').fill('await new Promise(resolve => setTimeout(resolve, 20000));')
     page.locator('#run-code').click()
+    page.locator('#stop-code').wait_for(state='visible')
     page.locator('#stop-code').click()
     assert page.locator('#stop-code').is_disabled()
 
@@ -171,6 +173,7 @@ def test_project_transfer(page,context):
     with page.expect_download() as info:page.locator('#export-zip').click()
     zip_data=Path(info.value.path()).read_bytes()
     assert zip_data[:2]==b'PK'
+    page.on('dialog',lambda d:d.accept())
     page.locator('#import-project').set_input_files({'name':'imported.json','mimeType':'application/json','buffer':data})
     page.wait_for_function('document.querySelector("#project-select").options.length >= 2')
     page.locator('#import-project').set_input_files({'name':'zip-import.zip','mimeType':'application/zip','buffer':zip_data})
@@ -401,7 +404,7 @@ def test_reopen_persistence(page,context):
     page.locator('#code-editor').fill('console.log("persisted-workspace-marker");')
     page.wait_for_timeout(900)
     page.reload()
-    page.locator('#view-overview h1').wait_for(timeout=12000)
+    page.locator('#view-workspace').wait_for(timeout=12000)
     view(page,'workspace')
     assert 'persisted-workspace-marker' in page.locator('#code-editor').input_value()
 
