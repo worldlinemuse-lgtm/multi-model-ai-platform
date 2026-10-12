@@ -99,10 +99,24 @@ def main():
    # Explicit comparison route chooser and Cloudflare account selection, using only nonworking test values.
    context,page,errors=fresh()
    page.locator('[data-view="vault"]').first.click()
+   # A locked/uncreated vault must never prevent typing provider details.
+   assert page.locator('#key-provider').is_enabled()
+   assert page.locator('#key-model').is_enabled()
+   assert page.locator('#key-value').is_enabled()
+   assert page.locator('#key-account').is_enabled()
+   page.locator('#key-provider').select_option('groq')
+   page.locator('#key-model').fill('test-model-before-unlock')
+   page.locator('#key-value').fill('typed-before-unlock')
+   assert page.locator('#key-value').input_value()=='typed-before-unlock'
+   page.locator('#save-key').click()
+   assert page.locator('#key-value').input_value()=='typed-before-unlock'
+   assert 'Create or unlock your vault' in page.locator('#vault-entry-hint').inner_text() or 'first' in page.locator('#toast').inner_text()
    page.locator('#vault-password').fill('not-a-real-key-test-passphrase')
    page.locator('#vault-submit').click()
    print('REGRESSION WAIT 10',flush=True)
    page.wait_for_function("document.querySelector('#vault-status').textContent==='UNLOCKED'",timeout=12000)
+   assert page.locator('#key-value').input_value()=='typed-before-unlock'
+   assert page.locator('#key-model').input_value()=='test-model-before-unlock'
    def save_provider(route,key,account=''):
     page.locator('#key-provider').select_option(route)
     page.locator('#key-value').fill(key)
