@@ -51,9 +51,9 @@ def main():
             checkpoint('mobile sidebar toggles')
             page.set_viewport_size({'width':375,'height':790})
             page.locator('#mobile-menu').click()
-            expect(page.locator('#sidebar')).to_have_class(__import__('re').compile(r'.*\\bopen\\b.*'),timeout=10000)
+            page.wait_for_function("document.querySelector('#sidebar').classList.contains('open')",timeout=10000)
             page.locator('#sidebar-close').click()
-            expect(page.locator('#sidebar')).not_to_have_class(__import__('re').compile(r'.*\\bopen\\b.*'),timeout=10000)
+            page.wait_for_function("document.querySelector('#sidebar').classList.contains('open')",timeout=10000)
             checkpoint('JavaScript errors')
             if errors:
                 raise AssertionError('Uncaught browser page errors: '+repr(errors))
