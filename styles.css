@@ -9,3 +9,7 @@
 @media(max-width:760px){.nav-backdrop:not([hidden]){display:block;position:fixed;inset:0;background:#020814b3;z-index:29}.side-close{display:inline-grid;align-self:flex-end;margin-bottom:8px}}
 
 .recovery-tools{border:1px solid #805863;background:#372a35;padding:15px;border-radius:10px;margin:16px 0}.recovery-tools h3{color:#ffd1da}.recovery-tools[hidden]{display:none}
+
+/* P13: virtual project folder group headers, not OS directories. */
+.folder-entry{padding:8px 10px 4px;font-size:11px;letter-spacing:.015em;opacity:.77;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
+.file-tree .file-entry{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
