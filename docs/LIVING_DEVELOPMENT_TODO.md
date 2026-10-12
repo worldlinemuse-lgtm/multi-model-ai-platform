@@ -1,6 +1,6 @@
 # Multi-Model AI Platform — Living Development TODO
 
-**Record version:** 2026-10-12 22:23 UTC — autonomous continuation initialization. **Authority:** original 60-item B0.3.2 audit (immutable), repository `worldlinemuse-lgtm/multi-model-ai-platform`, plus latest verified GitHub Actions. **Public main:** `5d4c9cff6bf5eac2ddeb1799b410c199a8385f89`; hosted verification `38308404258` SUCCESS (checks/deploy/hosted Chromium). **User instruction:** perform all independent tasks and testing, expand this list when testing finds more work, save to Library throughout, defer user-only gates until last. No historical releases or other Muse repositories may be altered.
+**Record version:** 2026-10-12 22:23 UTC — autonomous continuation initialization. **Authority:** original 60-item B0.3.2 audit (immutable), repository `worldlinemuse-lgtm/multi-model-ai-platform`, plus latest verified GitHub Actions. **Public main at latest verified time:** `13b3a1b04ed5e5dcdb470973d55b97b5e484ba04`; hosted verification `38318201795` SUCCESS (checks/deploy/hosted Chromium). **User instruction:** perform all independent tasks and testing, expand this list when testing finds more work, save to Library throughout, defer user-only gates until last. No historical releases or other Muse repositories may be altered.
 
 ## Status / evidence rules
 
@@ -13,17 +13,17 @@
 
 ## Immediate independent work queue — ordered
 
-- [ ] **Q01 / P04 — faithful HTML preview asset resolution:** resolve referenced local CSS and JS in original document order; reject traversal or missing assets explicitly; preserve the opaque-origin CSP, no remote network. Unit/Chromium regression and hosted acceptance. **Status READY.**
-- [ ] **Q02 / P02 — true browser Python acceptance:** exercise Pyodide in real Chromium with CDN/network and a realistic cold-start bound; surface CDN failure separately from logic failure; do not claim offline Python support until tested. **READY.**
+- [-] **Q01 / P04 — faithful HTML preview asset resolution:** resolve referenced local CSS and JS in original document order; reject traversal or missing assets explicitly; preserve opaque-origin CSP, no remote network. Unit/Chromium regression and hosted acceptance. **VERIFIED limited scope: PR #10 commit `dd1d84e9cc49e6f83573fcd2b6ae151db8e0a8fb`, branch CI `38316905725` and post-merge `38317094795` (checks/deploy/hosted Chromium) SUCCESS. Remaining: local binary assets, module graph and bundler.**
+- [x] **Q02 / P02 — true browser Python acceptance:** exercise Pyodide in real Chromium with CDN/network and a realistic cold-start bound; surface CDN failure separately from logic failure; do not claim offline Python support until tested. **VERIFIED hosted scope: PR #11 main `de867bacb64026d1763a761b61edcd08b83c874f`, branch run `38317353622` + post-merge run `38317526561` all jobs SUCCESS, real Pyodide stdout and health verified. Remaining: persistent Python kernels, offline packages.**
 - [ ] **Q03 / P03 — safe multi-file JS execution:** local relative imports/entrypoint with isolation, strict resource bounds, no npm/install access or live-network escalation. Tests, source import errors and declared limitations. **READY.**
 - [ ] **Q04 / P12 + P22 — IDE code-assist review tools:** local diff preview, explicit operator-accepted edit proposal, protected source and snapshot rollback, validation and Chromium acceptance. **READY (provider-free part).**
-- [ ] **Q05 / P15 — durable knowledge edit/update/deduplication:** edit note with provenance and explicit apply, safe dedupe, structured JSON flattening under size cap. Test retention and backup round-trip. **READY.**
+- [-] **Q05 / P15 — durable knowledge edit/update/deduplication:** edit note with provenance and explicit apply, safe dedupe, structured JSON flattening under size cap. Test retention and backup round-trip. **VERIFIED limited scope: PR #12 main `13b3a1b04ed5e5dcdb470973d55b97b5e484ba04`, CI `38318035400` SUCCESS, post-merge run `38318201795` all three stages SUCCESS. Edit/cancel/confirm, note provenance and exact duplicate report done. Structured JSON flattening, semantic search/deduplication and note history remain.**
 - [ ] **Q06 / N10 — local PDF and DOCX text extraction:** investigate browser-local implementation with strict bounds/no remote conversion; only certify formats actually tested, no OCR claim. **INVESTIGATE.**
 - [ ] **Q07 / P20 — reusable WASM project runner:** explicit file/bytes input and import/exports diagnostics with CPU/memory and CSP isolation, no execution of arbitrary network instructions. **READY/INVESTIGATE.**
 - [ ] **Q08 / P25 — image crop/rotation/undo and save-to-project:** local canvas only; preserve pixel dimensions and export truth. **READY.**
 - [ ] **Q09 / P26 — voice selection/rate/pitch and truthful dictation state:** in-browser static tests and supported feature detection; physical-mic acceptance stays gated. **READY, partial device gate.**
 - [ ] **Q10 / P29 — traceability:** bounded request ID/model/latency/status/provenance with privacy redaction; no raw secrets/prompts logged without consent; evidence export. **READY.**
-- [ ] **Q11 / P30 — live browser capability diagnostics:** permission and IndexedDB/Worker/WASM/WebGPU truthful supported/blocked/unknown outcomes; no fabricated live provider checks. **READY.**
+- [~] **Q11 / P30 — live browser capability diagnostics:** permission and IndexedDB/Worker/WASM/WebGPU truthful supported/blocked/unknown outcomes; no fabricated live provider checks. **TESTING PR #13, head `d2ff90c66ebb8cb620914318c52ffafbda7c164c`, branch run `38318571218` queued.**
 - [ ] **Q12 / P33 — comprehensive acceptance tests:** accessibility/keyboard, offline update, error/fault-injection, profile reset, security regression, screen-state persistence; add targeted tests per new feature. **READY, continuously recurring.**
 - [ ] **Q13 / P23 — snapshot full line diff:** bounded and safe textual diff, no silent application. **READY.**
 - [ ] **Q14 / P13 — virtual project folder copy/selection, refactor:** maintain collision and traversal protection; must not access physical filesystem. **READY.**
@@ -77,3 +77,12 @@
 ## Living worklog
 
 - **2026-10-12 22:23 UTC:** validated latest main `5d4c9cf` and post-merge run `38308404258` (all 3 jobs PASS); no open PRs; read original 60-item audit and the prior Library checkpoint. Created this ongoing task inventory. Twice-daily flexible continuation scheduled for approximately 08:00 and 19:00 America/New_York. Next initial implementation: Q01/P04. At each run read latest saved checkpoints and update a new version of this TODO after test outcomes, source changes, and discovered defects.
+
+
+- **2026-10-12 22:29 UTC:** opened PR #10 `https://github.com/worldlinemuse-lgtm/multi-model-ai-platform/pull/10` at development head `c9a61c1c398832851bca44193bf458e082b38ec1` for P04 linked asset preview with dedicated unit and Chromium tests. Branch run `38316905725` in progress. Original main remains `5d4c9cf` until CI and merge; no external credentials used. Library checkpoint saved separately.
+
+- **2026-10-12 22:34 UTC:** P04 PR #10 passed branch Chromium, merged as `dd1d84e`; post-merge hosted run `38317094795` is still in progress. Opened P02 PR #11 for real non-mocked Pyodide Python Chromium execution; branch CI run `38317353622` queued. Captured this state in another Library checkpoint; user-account gates remain deferred.
+
+- **2026-10-12 22:41 UTC:** confirmed public P04 run `38317094795` SUCCESS and real Pyodide public P02 run `38317526561` SUCCESS. P15 PR #12 created on `audit-p15-notes-edit-dedupe-20261012` at head `e9de2283129197a319bf3aa40c6d16bd53392bec`, run `38318035400` queued. Saved a new Library checkpoint and kept Q05 TESTING, not verified.
+
+- **2026-10-12 22:47 UTC:** Confirmed P15 hosted run `38318201795` all jobs SUCCESS and main `13b3a1b`. PR #13 for P30 read-only local capabilities created at head `d2ff90c` with branch CI `38318571218` queued; operator/provider connectivity remains intentionally unverified. Saved new Library checkpoint plus revised TODO.
