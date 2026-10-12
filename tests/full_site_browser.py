@@ -222,10 +222,25 @@ def check_data(p):
     p.locator('#data-analyze').click()
     verify('Analysis failed:' in p.locator('#data-status').inner_text(),'Invalid data not rejected')
     verify(p.locator('#data-table tbody tr').count()==0,'Old data remained after parse error')
-def make_png():
+def make_png(width=2,height=1):
     def chunk(name,data):return struct.pack('!I',len(data))+name+data+struct.pack('!I',zlib.crc32(name+data)&0xffffffff)
-    scan=b'\x00'+b'\xff\x20\x20\xff'*2
-    return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('!IIBBBBB',2,1,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(scan))+chunk(b'IEND',b'')
+    scan=(b'\x00'+b'\xff\x20\x20\xff'*width)*height
+    return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('!IIBBBBB',width,height,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(scan))+chunk(b'IEND',b'')
+def check_knowledge_freshness(p):
+    screen(p,'workspace')
+    filename=p.locator('#active-file').inner_text()
+    p.locator('#code-editor').fill('initial knowledge source text')
+    screen(p,'knowledge')
+    p.locator('#knowledge-search').fill(filename)
+    p.locator('#knowledge-results button').first.click()
+    verify('initial knowledge source text' in p.locator('#knowledge-preview').inner_text(),'First knowledge preview did not show current source')
+    screen(p,'workspace')
+    p.locator('#code-editor').fill('updated knowledge source text')
+    screen(p,'knowledge')
+    verify('updated knowledge source text' in p.locator('#knowledge-preview').inner_text(),'D13 stale project-file preview')
+    p.locator('#knowledge-to-chat').click()
+    verify('updated knowledge source text' in p.locator('#chat-input').input_value(),'D13 inserted stale code into chat')
+
 def check_media(p):
     screen(p,'media')
     p.locator('#media-image').set_input_files({'name':'qa.png','mimeType':'image/png','buffer':make_png()})
@@ -243,6 +258,30 @@ def check_media(p):
     verify('Speaking' in p.locator('#speech-status').inner_text() or 'Finished' in p.locator('#speech-status').inner_text(),'Speech action did not update status')
     p.locator('#speech-stop').click()
     verify('stopped' in p.locator('#speech-status').inner_text().lower(),'Speech stop did not update status')
+    verify(not p.locator('#media-original-resolution').is_checked(),'D17 high-resolution export should be opt-in')
+    verify('Original:' in p.locator('#media-resolution-status').inner_text(),'D17 resolution disclosure missing')
+    p.locator('#media-image').set_input_files({'name':'wide.png','mimeType':'image/png','buffer':make_png(2000,1)})
+    p.wait_for_function("document.querySelector('#media-canvas').width === 1600",timeout=10000)
+    with p.expect_download() as reduced:p.locator('#media-download').click()
+    reduced_bytes=Path(reduced.value.path()).read_bytes()
+    verify(struct.unpack('!II',reduced_bytes[16:24])==(1600,1),'D17 preview-size export did not use visible resolution')
+    p.locator('#media-original-resolution').check()
+    with p.expect_download() as original:p.locator('#media-download').click()
+    original_bytes=Path(original.value.path()).read_bytes()
+    verify(struct.unpack('!II',original_bytes[16:24])==(2000,1),'D17 original-resolution PNG export lost dimensions')
+
+    p.evaluate("""() => {
+      window.__dictationStopped=false;
+      window.SpeechRecognition=class {
+        start(){ window.__dictationStarted=true; }
+        stop(){ window.__dictationStopped=true; if(this.onend)this.onend(); }
+      };
+    }""")
+    p.locator('#speech-dictate').click()
+    verify(p.evaluate('window.__dictationStarted === true'),'D15 dictation did not start')
+    p.locator('#speech-stop').click()
+    verify(p.evaluate('window.__dictationStopped === true'),'D15 recognition not stopped')
+    verify('stopped' in p.locator('#speech-status').inner_text().lower(),'D15 stop status overwritten')
 def check_settings(p):
     screen(p,'settings')
     p.locator('#accent-select').select_option('violet')
@@ -290,6 +329,7 @@ CASES=[
  ('Mocked API adapter through chat, history, audit and export',check_chat),
  ('Mocked three-stage workflow and stage cap',check_workflows),
  ('Knowledge note creation, retrieval, chat insertion and archive roundtrip',check_knowledge),
+ ('D13 live knowledge after project-file edits',check_knowledge_freshness),
  ('Data CSV/JSON/WASM/chart/error and export',check_data),
  ('Canvas media adjustments, PNG and speech controls',check_media),
  ('Preferences, backup, restore rejection, persisted settings and reset',check_settings),

@@ -2,6 +2,8 @@ name: Deploy and verify browser studio
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -42,6 +44,7 @@ jobs:
           python tests/browser_regression.py --base-url http://127.0.0.1:8000
           python tests/full_site_browser.py --base-url http://127.0.0.1:8000
   deploy:
+    if: github.event_name != 'pull_request'
     needs: checks
     runs-on: ubuntu-latest
     outputs:
@@ -58,6 +61,7 @@ jobs:
       - id: deployment
         uses: actions/deploy-pages@v4
   hosted-acceptance:
+    if: github.event_name != 'pull_request'
     needs: deploy
     runs-on: ubuntu-latest
     timeout-minutes: 20
