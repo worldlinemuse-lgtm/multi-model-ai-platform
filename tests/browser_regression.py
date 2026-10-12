@@ -148,4 +148,15 @@ def main():
    import traceback
    print('FAIL: B0.3.3 browser regressions: '+traceback.format_exc()[-3000:],flush=True);return 1
 
-if __name__=='__main__':sys.exit(main())
+if __name__=='__main__':
+ result=main()
+ if result==0:
+  import subprocess
+  argv=[sys.executable,'tests/full_site_acceptance.py']
+  if '--base-url' in sys.argv:
+   argv+=['--base-url',sys.argv[sys.argv.index('--base-url')+1]]
+  if 'github.io' in ' '.join(sys.argv):
+   argv+=['--include-python']
+  result=subprocess.call(argv)
+ sys.exit(result)
+
