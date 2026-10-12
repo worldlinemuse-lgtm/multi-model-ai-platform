@@ -66,3 +66,15 @@ test('D08: knowledge note export is losslessly re-importable, including prior ar
  assert.equal(parseNoteArchive('{"arbitrary":"json"}'),null);
  assert.throws(()=>parseNoteArchive(JSON.stringify({format:NOTES_FORMAT,notes:[{title:1,content:'x',id:'id',created:'now'}]})),/invalid record/);
 });
+
+test('P23: pinned snapshots survive validated backup roundtrip; nonboolean pin rejected',()=>{
+ const data=freshState();
+ const snap={id:'snapshot-verified-1',at:'2026-10-12T19:40:00Z',label:'Pinned',project:clone(data.projects[0]),pinned:true};
+ data.snapshots=[snap];
+ assert.equal(validateState(data),true);
+ assert.equal(validateState(JSON.parse(JSON.stringify(data))),true);
+ data.snapshots[0].pinned='yes';
+ assert.equal(validateState(data),false);
+ delete data.snapshots[0].pinned;
+ assert.equal(validateState(data),true,'older snapshots lacking pinned field must remain importable');
+});
