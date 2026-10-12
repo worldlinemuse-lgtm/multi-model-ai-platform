@@ -170,6 +170,32 @@ def check_chat(p):
     approve(p)
     p.locator('#clear-audit').click()
     verify(p.locator('#usage-total').inner_text()=='0','Clear audit failed')
+def check_chat_management(p):
+    mock_provider(p)
+    setup_vault(p)
+    screen(p,'chat')
+    p.locator('#chat-route').select_option('groq')
+    p.locator('#chat-input').fill('P14 SEARCH UNIQUE ORIGINAL')
+    p.locator('#send-chat').click()
+    p.wait_for_function("document.querySelector('#chat-messages').textContent.includes('SYNTHETIC ACCEPTANCE RESPONSE')",timeout=12000)
+    approve(p,'P14 EDITED USER MESSAGE')
+    p.locator('#chat-messages .bubble.user button').click()
+    verify('P14 EDITED USER MESSAGE' in p.locator('#chat-messages').inner_text(),'P14 saved user edit failed')
+    p.locator('#thread-search').fill('P14 EDITED USER MESSAGE')
+    verify(p.locator('#thread-list button').count()==1,'P14 search inside messages failed')
+    p.locator('#thread-search').fill('NO RESULTS NEEDLE 123')
+    verify('No matching conversations' in p.locator('#thread-list').inner_text(),'P14 empty search state missing')
+    p.locator('#thread-search').fill('')
+    with p.expect_download() as exported:p.locator('#export-chat-thread').click()
+    payload=json.loads(Path(exported.value.path()).read_text())
+    verify(payload['format']=='mm-studio-thread-v1','P14 thread format missing')
+    verify(payload['thread']['messages'][0]['content']=='P14 EDITED USER MESSAGE','P14 exported user edit not present')
+    approve(p)
+    p.locator('#delete-chat-thread').click()
+    verify(p.locator('#thread-list button').count()==1,'P14 last-thread deletion did not leave valid empty thread')
+    verify(p.locator('#chat-messages .bubble').count()==0,'P14 deleted thread still present')
+    verify(not p.locator('#thread-search').input_value(),'P14 unexpected search modification')
+
 def check_workflows(p):
     mock_provider(p)
     setup_vault(p)
@@ -352,6 +378,7 @@ CASES=[
  ('Eight provider directory records and setup navigation',check_providers),
  ('Vault locked typing, encryption, persistence, wrong password, removal and wipe',check_vault),
  ('Mocked API adapter through chat, history, audit and export',check_chat),
+ ('P14 local conversation search edit export delete',check_chat_management),
  ('Mocked three-stage workflow and stage cap',check_workflows),
  ('Knowledge note creation, retrieval, chat insertion and archive roundtrip',check_knowledge),
  ('D13 live knowledge after project-file edits',check_knowledge_freshness),
