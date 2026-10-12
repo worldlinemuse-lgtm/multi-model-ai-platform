@@ -81,7 +81,9 @@ def main():
    with page.expect_download() as info:page.locator('#knowledge-export').click()
    body=Path(info.value.path()).read_bytes()
    assert json.loads(body)['format']=='mm-studio-notes-v1'
+   page.locator('#knowledge-search').fill('Important reference')
    page.locator('#knowledge-results button').first.click()
+   assert 'Reference data: 128' in page.locator('#knowledge-preview').inner_text()
    page.locator('#knowledge-delete').click()
    print('REGRESSION WAIT 8',flush=True)
    page.wait_for_function("document.querySelector('#note-count').textContent.includes('0')")
