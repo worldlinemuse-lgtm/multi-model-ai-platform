@@ -1,39 +1,36 @@
-# Functional audit remediation tracker
+# Functional completeness audit — live remediation tracker
 
-Updated: 2026-10-12 UTC. Original immutable source: Persistent File Library `/Multi-Model AI Platform/04_verification/B0_3_2_FUNCTIONAL_COMPLETENESS_AUDIT_2026_10_11.md`.
+Updated: 2026-10-12 UTC.
+Immutable baseline: Persistent File Library `/Multi-Model AI Platform/04_verification/B0_3_2_FUNCTIONAL_COMPLETENESS_AUDIT_2026_10_11.md`.
+There are 60 baseline items: 17 D, 33 P and 10 N. This tracker is a **post-baseline status record**, not a rewrite of the original audit.
 
-This tracks the 60 original audit IDs without silently counting a partially fixed item as fully complete. Historical baselines and archives are not rewritten.
+## Completed and accepted with post-merge hosted verification
 
-## Verified and deployed
+- **B0.3.3:** D01, D02, D03, D04, D05, D06, D07, D08, D10, D11, D12, P07, P32. See `docs/B0_3_3_REPAIRS.md` and the original B0.3.3 verified release archive.
+- **PR #1 / main `3e75847ea7c6c7e9434f1e12ae4450a469bc132b`:** D13 live knowledge-file references, D15 active dictation stop, D16 cache refresh confirmation and failure, D17 user-selectable original-size PNG export with memory bounds. Post-merge GitHub Actions run `38278607837`: SUCCESS.
+- **PR #2 / main `dd5c6e3156d2617bc11dfb8178a1ab16ad348685`:** D09 live browser-local system health, P17 paginated chart/table rows with all columns displayed. Post-merge run `38279536473`: SUCCESS. P17 remains **partially** complete because advanced interactive drilldown is absent.
+- **PR #3 / main `2e310160e9c0fb50eefe6946a006c799ab521938`:** P14 local conversation search, selected-thread export/deletion, local user-message editing, retention warnings. Post-merge run `38280143553`: SUCCESS. P14 remains **partial** as full message-editing semantics and every history edge case are not certified.
+- **D14** misleading capability copy corrected in earlier batch. History searching and local user-message editing were later added with PR #3. **P21** misleading `TERMINAL` label corrected only; a real shell is *not* implemented.
 
-- **D01, D02, D03, D04, D05, D06, D07, D08, D10, D11, D12**, **P07, P32**: first B0.3.3 remediation; see `docs/B0_3_3_REPAIRS.md`, B0.3.3 hosted verification and follow-on QA records.
-- **D13, D15, D16, D17**: knowledge always resolves current file or note, microphone dictation stops, offline-cache refresh acknowledges completion/error, and users can choose preview-size or original-resolution PNG output (subject to explicit safety bounds). Merged at commit `3e75847ea7c6c7e9434f1e12ae4450a469bc132b`. PR #1 passed branch Chromium and Node tests; hosted Actions run `38278607837` passed checks, deploy and hosted acceptance.
-- **D14**: misleading claims corrected only. Conversation editing and history search are **not** implemented. Keep **P14** open.
-- **P21**: misleading terminal label corrected only. No actual shell/REPL exists; the implementation goal remains open.
+## Merged code with separate hosted acceptance not yet passing
 
-## Implemented in follow-up branch, awaiting CI/deployment
+- **PR #4 / main `acf9b3dcd8e03f0e054860f1e749357bbfe5e54e`:** P16 partial cross-project keyword search and live source resolution; P28 partial explicit provider request deadline/AbortController behavior (no automatic retries). Branch run `38280578428`: SUCCESS.
+- PR #4 post-merge run `38280806433`: unit/browser checkout and deploy succeeded; `hosted-acceptance` **FAILED** at the public browser smoke with no diagnostic detail in the old test. Therefore PR #4 must not be marked fully hosted verified.
+- Follow-up PR adds awaited browser assertions and stage diagnostics, scoped workflow concurrency, and bounded CI jobs. Its merge, deployment and hosted acceptance remain pending until independently confirmed.
 
-- **D09**: replace static system-health markup with live browser/device capability and local key-vault states. These are browser capability indicators, not real provider health probes.
-- **P17**: add table/chart pagination for every imported row and display all available columns, with range disclosure. This does not imply full data-analysis or drilldown tooling.
+## Remaining partial or open P items
 
-## Open and not yet independently certified
+- **Partially addressed:** P14 (conversation management), P16 (keyword cross-project search; no semantic index), P17 (pagination; no advanced drilldown), P21 (truthful label only, no actual REPL), P28 (timeout; broader diagnostics/retry design still missing), P33 (broad mocked GUI test coverage; not every control/provider/device).
+- **Other open P items:** P01, P02, P03, P04, P05, P06, P08, P09, P10, P11, P12, P13, P15, P18, P19, P20, P22, P23, P24, P25, P26, P27, P29, P30, P31.
+- **Genuinely unimplemented:** N01–N10 (search/retrieval tools, on-device LLM, in-website GitHub sync, extensible adapters, real quota routing, remote modalities, multi-device collaboration, persistent agents, other language runtimes, PDF/DOCX extraction).
 
-- **D items:** none other than the in-flight D09, assuming preceding shipped versions stay valid.
-- **Explicit open/partial list:** P01, P02, P03, P04, P05, P06, P08, P09, P10, P11, P12, P13, P14, P15, P16, P18, P19, P20, P21, P22, P23, P24, P25, P26, P27, P28, P29, P30, P31, P33.
-- **P17** implemented in merged PR #2; deployment verification must be confirmed separately. **P07/P32** closed at their documented B0.3.3 scope.
-- **P14** follow-up branch adds search, single-thread export/deletion, local user-message editing and warnings on limits; still pending CI, and assistant-output editing is intentionally withheld to preserve response provenance.
-- **N01–N10** are not built, including research API, on-device LLM, in-app GitHub sync, arbitrary adapters, quota-informed fallback, remote modalities, multi-device sync, autonomous agent layer, other language runtimes and document extraction.
+## Acceptance / security constraints
 
-## Branch-only follow-up, pending CI
-- **P16 (partial):** Local keyword search spans all locally saved projects; selected project-file previews resolve live content by project ID. Vector/semantic retrieval remains open.
-- **P28 (partial):** Browser provider requests gain a bounded request deadline, caller cancellation and a timeout-specific error; no retries are issued automatically. Real network CORS/credential diagnostics and any opt-in retry/backoff policy remain open.
+- An empty key slot, missing source data or unknown quota is a **correct waiting state**, not a broken button.
+- Synthetic HTTP mocks and fake keys prove UI flow logic, **not** real authenticated provider inference, CORS or account eligibility.
+- No unapproved auto-paid routing, quota claims, retry-spending, or plaintext secrets.
+- Physical microphone permission, mobile-specific behavior and real provider credentials remain user-controlled verification gates.
+- All earlier releases and Muse's other repositories remain outside modification scope.
+- A changed implementation is **not** complete without passing unit/Chromium checks and separate hosted verification when applicable.
 
-## User-dependent acceptance gates
-
-- Real provider credentials, account eligibility, free-tier quotas, consent, service-specific CORS and model availability: do not fake; use secure user-controlled setup.
-- Actual microphone permission, physical device/mobile-specific tests, and external account authorization require user-controlled environments.
-- Never commit tokens, secrets or personal workspace data into GitHub or public test logs.
-
-## Verification standard
-
-Code written is not synonymous with working. For closure, require source review + repeatable tests + GitHub-hosted browser acceptance where relevant. Keep branch-only entries pending until CI and public-site deployment both succeed. The full 60-finding source is preserved in Library.
+See `docs/EXECUTION_RECOVERY_AND_CI.md` for the current procedure used to avoid blocked local-VM execution and investigate opaque CI failures.
