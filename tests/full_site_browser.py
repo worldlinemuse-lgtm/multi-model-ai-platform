@@ -4,7 +4,7 @@ Synthetic provider responses are NOT proof of real provider connectivity.
 """
 import argparse,base64,io,json,os,sys,traceback,zipfile,zlib,struct
 from pathlib import Path
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, expect
 
 PASS=[]
 FAIL=[]
@@ -136,7 +136,7 @@ def check_html_preview(p):
     screen(p,'workspace')
     p.locator('#file-tree .file-entry[title="index.html"]').click()
     p.locator('#preview-page').click()
-    verify(p.frame_locator('#preview-host iframe').get_by_text('Hello from the browser workbench!').count()==1,'HTML preview failed')
+    expect(p.frame_locator('#preview-host iframe').get_by_text('Hello from the browser workbench!')).to_have_count(1,timeout=12000)
     p.locator('#show-console').click()
     verify(p.locator('#console-pane').is_visible(),'Console tab failed')
     p.locator('#show-preview').click()
