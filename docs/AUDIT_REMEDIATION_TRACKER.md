@@ -24,6 +24,9 @@ There are 60 baseline items: 17 D, 33 P and 10 N. This tracker is a **post-basel
 - **Other open P items:** P01, P02, P03, P04, P05, P06, P08, P09, P10, P11, P12, P13, P15, P18, P19, P20, P22, P23, P24, P25, P26, P27, P29, P30, P31.
 - **Genuinely unimplemented:** N01–N10 (search/retrieval tools, on-device LLM, in-website GitHub sync, extensible adapters, real quota routing, remote modalities, multi-device collaboration, persistent agents, other language runtimes, PDF/DOCX extraction).
 
+## Current workstream pending independent CI
+- **P23 (partial)**: controlled snapshot rename, compare-by-file status, re-importable JSON export, pin/unpin against eviction, explicit deletion, and a confirmation before evicting the oldest unpinned snapshot. Full line-by-line diff is not yet implemented. These changes are branch-only until PR and post-merge hosted checks pass.
+
 ## Acceptance / security constraints
 
 - An empty key slot, missing source data or unknown quota is a **correct waiting state**, not a broken button.
