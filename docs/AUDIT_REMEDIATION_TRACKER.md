@@ -22,13 +22,15 @@ There are 60 baseline items: 17 D, 33 P and 10 N. This tracker is a **post-basel
 
 - **Partially addressed:** P14 (conversation management), P16 (keyword cross-project search; no semantic index), P17 (pagination; no advanced drilldown), P21 (truthful label only, no actual REPL), P28 (timeout; broader diagnostics/retry design still missing), P33 (broad mocked GUI test coverage; not every control/provider/device).
 - **Other open P items:** P01, P02, P03, P04, P05, P06, P08, P09, P10, P11, P12, P13, P15, P20, P22, P24, P25, P26, P27, P29, P30.
-- **P18/P19 branch-only:** named local datasets persisted in the validated full-backup workspace, and bounded filter/sort/deduplication with single-level undo; awaiting PR tests and hosted verification. Does not imply a general data-pipeline engine.
+- **P18/P19 / PR #8 / main `026c48591bf7962fef41761ced07e503a48c475d`:** browser-local named datasets persisted in validated full workspace backups, filter/sort/deduplication and one-level undo. Hosted GitHub Actions run `38307743830` **SUCCESS** (checks, deploy, hosted Chromium). Advanced data pipeline functionality remains out of scope.
 - **Genuinely unimplemented:** N01–N10 (search/retrieval tools, on-device LLM, in-website GitHub sync, extensible adapters, real quota routing, remote modalities, multi-device collaboration, persistent agents, other language runtimes, PDF/DOCX extraction).
 
 ## Current workstream pending independent CI
 - **P23 (partial) / PR #6 / main `85696a92edd5f0b21a2e09a316b812496464f769`:** snapshot rename, file-status comparison, importable JSON export, pin/unpin, confirmed delete and eviction warning. Full line diff not implemented. GitHub post-merge run `38300179740`: checks, deployment and hosted acceptance **SUCCESS**.
 
 - **P31 (partial) / PR #7 / main `60cfcefe064b022d4400269aee75bccc115494df`:** isolated application-specific offline caches; real warm-offline reload and local Data Lab/navigation tests. GitHub post-merge run `38300929801` passed checks, deployment and hosted acceptance. Offline cold-start and update-conflict scenarios remain open.
+
+- **P13 (partial) branch-only:** virtual Code Studio folder tree, controlled atomic folder moves including active-file updates; no OS filesystem or binary asset support. Pending CI and hosted verification.
 
 ## Acceptance / security constraints
 
