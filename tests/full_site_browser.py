@@ -101,6 +101,28 @@ def check_workspace(p):
     approve(p)
     p.locator('#delete-project').click()
     verify('qa-import' not in p.locator('#stat-project').inner_text(),'Delete project failed')
+def check_folder_management(p):
+    screen(p,'workspace')
+    approve(p,'src/lib/a.js')
+    p.locator('#add-file').click()
+    p.locator('#code-editor').fill('console.log("folder A");')
+    approve(p,'src/lib/b.js')
+    p.locator('#add-file').click()
+    p.locator('#code-editor').fill('console.log("folder B");')
+    verify(p.locator('#file-tree .folder-entry[title="src/lib"]').count()==1,'P13 nested folder header missing')
+    verify(p.locator('#file-tree .file-entry[title="src/lib/b.js"]').count()==1,'P13 nested file missing')
+    replies=iter(['src/lib','packages/tools',''])
+    def dialog_handler(dialog):dialog.accept(next(replies,''))
+    p.on('dialog',dialog_handler)
+    p.locator('#move-folder').click()
+    verify(p.locator('#file-tree .file-entry[title="packages/tools/a.js"]').count()==1,'P13 folder move lost file A')
+    verify(p.locator('#file-tree .file-entry[title="packages/tools/b.js"]').count()==1,'P13 folder move lost file B')
+    verify('packages/tools/b.js' in p.locator('#active-file').inner_text(),'P13 active file did not follow folder move')
+    verify(p.locator('#file-tree .file-entry[title="src/lib/a.js"]').count()==0,'P13 old folder still contains moved file')
+    with p.expect_download() as saved:p.locator('#export-json').click()
+    project=json.loads(Path(saved.value.path()).read_text())
+    verify(project['files']['packages/tools/b.js']=='console.log("folder B");','P13 move damaged file bytes')
+
 def check_snapshot_management(p):
     screen(p,'workspace')
     current=p.locator('#active-file').inner_text()
@@ -462,6 +484,7 @@ def check_mobile(p):
 CASES=[
  ('12-screen navigation and command palette',check_navigation),
  ('Workspace projects, files, runner, snapshots, JSON ZIP and import/export',check_workspace),
+ ('P13 nested explorer and collision-safe folder relocation',check_folder_management),
  ('P23 snapshot compare, pin, rename, export and safe deletion',check_snapshot_management),
  ('Isolated HTML preview tabs',check_html_preview),
  ('Eight provider directory records and setup navigation',check_providers),
