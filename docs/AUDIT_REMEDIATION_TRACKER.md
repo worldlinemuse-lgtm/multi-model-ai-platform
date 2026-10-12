@@ -21,7 +21,7 @@ There are 60 baseline items: 17 D, 33 P and 10 N. This tracker is a **post-basel
 ## Remaining partial or open P items
 
 - **Partially addressed:** P14 (conversation management), P16 (keyword cross-project search; no semantic index), P17 (pagination; no advanced drilldown), P21 (truthful label only, no actual REPL), P28 (timeout; broader diagnostics/retry design still missing), P33 (broad mocked GUI test coverage; not every control/provider/device).
-- **Other open P items:** P01, P02, P03, P04, P05, P06, P08, P09, P10, P11, P12, P13, P15, P20, P22, P24, P25, P26, P27, P29, P30.
+- **Other open P items:** P01, P03, P05, P06, P08, P09, P10, P11, P12, P13, P20, P22, P24, P25, P26, P27, P29, P30. **P02 and P04** have verified limited scope with the remaining gaps detailed below. **P15** is being developed.
 - **P18/P19 / PR #8 / main `026c48591bf7962fef41761ced07e503a48c475d`:** browser-local named datasets persisted in validated full workspace backups, filter/sort/deduplication and one-level undo. Hosted GitHub Actions run `38307743830` **SUCCESS** (checks, deploy, hosted Chromium). Advanced data pipeline functionality remains out of scope.
 - **Genuinely unimplemented:** N01–N10 (search/retrieval tools, on-device LLM, in-website GitHub sync, extensible adapters, real quota routing, remote modalities, multi-device collaboration, persistent agents, other language runtimes, PDF/DOCX extraction).
 
@@ -32,9 +32,11 @@ There are 60 baseline items: 17 D, 33 P and 10 N. This tracker is a **post-basel
 
 - **P13 (partial) / PR #9 / main `5d4c9cff6bf5eac2ddeb1799b410c199a8385f89`:** nested virtual folder tree and collision-safe whole-folder moves; user-confirmed source updates. Post-merge production run `38308404258`: checks, deploy, hosted Chromium **SUCCESS**. Copy/multi-select/project-wide refactoring remains open.
 
-- **P04 (partial) / PR #10 / main `dd1d84e9cc49e6f83573fcd2b6ae151db8e0a8fb`:** local HTML preview resolves only referenced CSS and classic JS in order, with relative paths and clear blocked/missing asset warnings. Branch checks PASSED; public run `38317094795` pending hosted acceptance at this checkpoint. Relative binary assets, module imports and bundling remain open.
+- **P04 (partial) / PR #10 / main `dd1d84e9cc49e6f83573fcd2b6ae151db8e0a8fb`:** local HTML preview resolves referenced CSS and classic JS in order with clear blocked/missing asset warnings. Post-merge run `38317094795`: checks, deploy and hosted Chromium **SUCCESS**. Relative binary assets, module imports and bundling remain open.
 
-- **P02 (branch-only):** real Pyodide worker execution acceptance in Chromium against both checkout and public hosted origin, with 120-second explicit cap and truthful runtime state. Pending branch CI and actual CDN evidence; no result may be reported as verified prematurely.
+- **P02 (verified real hosted scope) / PR #11 / main `de867bacb64026d1763a761b61edcd08b83c874f`:** real Pyodide loaded from CDN in checkout and public hosted Chromium; verified Python stdout, completion, Stop state, and truthful runtime status. Branch run `38317353622` passed, post-merge run `38317526561` all stages **SUCCESS**. Persistent Python kernels/offline Python packages remain open.
+
+- **P15 branch-only:** explicit saved-note editing with confirmation/cancel, preserved ID/timestamps and non-destructive exact-content duplicate reporting, plus Node and real Chromium tests. Pending PR CI/deployment.
 
 ## Acceptance / security constraints
 
