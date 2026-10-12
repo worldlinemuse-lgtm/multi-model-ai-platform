@@ -143,8 +143,8 @@ def check_vault(p):
     approve(p)
     p.locator('#vault-items .vault-item button').first.click()
     p.wait_for_function("document.querySelector('#vault-items').textContent.includes('No keys stored')",timeout=10000)
-    approve(p)
-    p.once('dialog',lambda d:d.accept())
+    # Two consecutive confirmation dialogs: accept each, not two handlers for the first.
+    p.on('dialog',lambda d:d.accept())
     p.locator('#vault-wipe').click()
     p.wait_for_function("document.querySelector('#vault-status').textContent==='NOT CREATED'",timeout=10000)
 def check_chat(p):
@@ -256,7 +256,7 @@ def check_settings(p):
     p.locator('#restore-all').set_input_files({'name':'bad.json','mimeType':'application/json','buffer':b'{"broken":true}'})
     p.wait_for_function("document.querySelector('#toast').textContent.includes('Restore failed')",timeout=10000)
     p.reload()
-    p.locator('#view-overview h1').wait_for()
+    p.locator('#view-settings h1').wait_for(timeout=12000)
     screen(p,'settings')
     verify(p.locator('#accent-select').input_value()=='violet','Preferences not persisted to IndexedDB')
     approve(p)
