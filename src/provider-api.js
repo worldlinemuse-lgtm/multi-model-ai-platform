@@ -11,8 +11,27 @@ export function parseReportedUsage(usage){
  const token = value => value===undefined||value===null||value===''?null:(Number.isSafeInteger(Number(value))&&Number(value)>=0?Number(value):null);
  return {prompt_tokens:token(usage.prompt_tokens),completion_tokens:token(usage.completion_tokens),total_tokens:token(usage.total_tokens),source:'provider_reported'};
 }
-export async function callProvider(id,credential,messages,{signal}={}){const request=buildRequest(id,credential,messages);let response;try{response=await fetch(request.url,{method:'POST',headers:request.headers,body:JSON.stringify(request.body),signal,mode:'cors',credentials:'omit',cache:'no-store',redirect:'error'});}catch(e){if(e.name==='AbortError')throw e;throw Error(`Browser request failed for ${providerById(id)?.name}. The provider may block cross-origin requests (CORS), or the network may be unavailable. ${e.message}`);}
-let payload;const responseText=await response.text();try{payload=JSON.parse(responseText);}catch{throw Error(`${id}: response was not JSON (HTTP ${response.status}).`);}if(!response.ok||payload?.success===false){const msg=payload?.error?.message||payload?.error||payload?.message||payload?.errors?.[0]?.message||JSON.stringify(payload).slice(0,260);throw Error(`${id}: HTTP ${response.status} — ${String(msg).slice(0,300)}`);}
+export async function callProvider(id,credential,messages,{signal,timeoutMs=45000}={}){
+ const request=buildRequest(id,credential,messages);
+ const ms=Number.isFinite(timeoutMs)&&timeoutMs>=1&&timeoutMs<=120000?timeoutMs:45000;
+ const combined=new AbortController(), deadline=new AbortController();
+ const forward=()=>combined.abort(signal?.reason||new DOMException('Stopped by user','AbortError'));
+ if(signal?.aborted)forward();else signal?.addEventListener('abort',forward,{once:true});
+ deadline.signal.addEventListener('abort',()=>{if(!combined.signal.aborted)combined.abort(deadline.signal.reason);},{once:true});
+ const timer=setTimeout(()=>deadline.abort(new DOMException('Request deadline exceeded','TimeoutError')),ms);
+ let response,responseText;
+ try{
+  response=await fetch(request.url,{method:'POST',headers:request.headers,body:JSON.stringify(request.body),signal:combined.signal,mode:'cors',credentials:'omit',cache:'no-store',redirect:'error'});
+  responseText=await response.text();
+ }catch(e){
+  if(deadline.signal.aborted&&!signal?.aborted)throw Error(`Request to ${providerById(id)?.name||id} timed out after ${Math.ceil(ms/1000)} seconds. Check provider availability or network; no automatic retry was sent.`);
+  if(e.name==='AbortError')throw e;
+  throw Error(`Browser request failed for ${providerById(id)?.name}. The provider may block cross-origin requests (CORS), or the network may be unavailable. ${e.message}`);
+ }finally{
+  clearTimeout(timer);
+  signal?.removeEventListener('abort',forward);
+ }
+let payload;try{payload=JSON.parse(responseText);}catch{throw Error(`${id}: response was not JSON (HTTP ${response.status}).`);}if(!response.ok||payload?.success===false){const msg=payload?.error?.message||payload?.error||payload?.message||payload?.errors?.[0]?.message||JSON.stringify(payload).slice(0,260);throw Error(`${id}: HTTP ${response.status} — ${String(msg).slice(0,300)}`);}
 let text='',usage=payload.usage||payload.result?.usage||null;
 if(id==='gemini'){text=(payload.candidates||[]).flatMap(c=>(c.content?.parts||[]).map(p=>p.text||'')).join('\n');usage=payload.usageMetadata?{prompt_tokens:payload.usageMetadata.promptTokenCount,completion_tokens:payload.usageMetadata.candidatesTokenCount,total_tokens:payload.usageMetadata.totalTokenCount}:null;}
 else if(id==='cloudflare'){const output=payload.result?.response||payload.result?.output||payload.result;text=typeof output==='string'?output:Array.isArray(output)?output.map(x=>x.text||x.content||'').join('\n'):JSON.stringify(output??'');}
