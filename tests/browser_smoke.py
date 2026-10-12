@@ -51,6 +51,7 @@ def main():
             checkpoint('mobile sidebar toggles')
             page.set_viewport_size({'width':375,'height':790})
             page.locator('#mobile-menu').click()
+            print('NAV OPEN SNAPSHOT:',page.evaluate("() => ({ sidebar: document.querySelector('#sidebar').className, menuExpanded: document.querySelector('#mobile-menu').getAttribute('aria-expanded'), backdropHidden: document.querySelector('#nav-backdrop').hidden, activeView: document.querySelector('#current-view-label').textContent })"),flush=True)
             page.wait_for_function("document.querySelector('#sidebar').classList.contains('open')",timeout=10000)
             page.locator('#sidebar-close').click()
             page.wait_for_function("document.querySelector('#sidebar').classList.contains('open')",timeout=10000)
