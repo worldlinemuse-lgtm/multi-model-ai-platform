@@ -407,6 +407,40 @@ def check_cross_project_knowledge(p):
     p.locator('#knowledge-to-chat').click()
     verify('P16-CROSS-PROJECT-UPDATED' in p.locator('#chat-input').input_value(),'P16 cross-project chat insertion stale')
 
+def check_note_edit_and_duplicates(p):
+    screen(p,'knowledge')
+    for title in ['QA duplicate first','QA duplicate second']:
+        p.locator('#knowledge-title').fill(title)
+        p.locator('#knowledge-content').fill('Exactly the same reference content')
+        p.locator('#knowledge-submit').click()
+    verify('2 notes' in p.locator('#note-count').inner_text(),'P15 two notes not stored')
+    p.locator('#knowledge-find-duplicates').click()
+    verify('2 notes' in p.locator('#knowledge-duplicate-report').inner_text(),'P15 exact duplicate group missing')
+    p.locator('#knowledge-search').fill('QA duplicate second')
+    p.locator('#knowledge-results button').first.click()
+    p.locator('#knowledge-edit').click()
+    verify(p.locator('#knowledge-submit').inner_text()=='Save changes','P15 edit mode not indicated')
+    p.locator('#knowledge-content').fill('This change should not be saved')
+    p.locator('#knowledge-cancel-edit').click()
+    verify('Exactly the same' in p.locator('#knowledge-preview').inner_text(),'P15 cancel altered saved note')
+    p.locator('#knowledge-edit').click()
+    p.locator('#knowledge-content').fill('Edited and verified note body')
+    approve(p)
+    p.locator('#knowledge-submit').click()
+    verify('Edited and verified note body' in p.locator('#knowledge-preview').inner_text(),'P15 edit did not replace saved note')
+    p.locator('#knowledge-find-duplicates').click()
+    verify('No exact-content duplicates' in p.locator('#knowledge-duplicate-report').inner_text(),'P15 duplicate report not refreshed')
+    with p.expect_download() as saved:p.locator('#knowledge-export').click()
+    data=json.loads(Path(saved.value.path()).read_text())
+    edited=[note for note in data['notes'] if note['title']=='QA duplicate second']
+    verify(len(edited)==1 and edited[0].get('updated'),'P15 edited note timestamp not archived')
+    p.wait_for_function("() => document.querySelector('#save-indicator').textContent.includes('Saved')",timeout=12000)
+    p.reload(wait_until='domcontentloaded')
+    screen(p,'knowledge')
+    p.locator('#knowledge-search').fill('QA duplicate second')
+    p.locator('#knowledge-results button').first.click()
+    verify('Edited and verified note body' in p.locator('#knowledge-preview').inner_text(),'P15 updated note lost on reload')
+
 def check_knowledge_freshness(p):
     screen(p,'workspace')
     filename=p.locator('#active-file').inner_text()
@@ -514,6 +548,7 @@ CASES=[
  ('P14 local conversation search edit export delete',check_chat_management),
  ('Mocked three-stage workflow and stage cap',check_workflows),
  ('Knowledge note creation, retrieval, chat insertion and archive roundtrip',check_knowledge),
+ ('P15 explicit note edit/cancel and exact duplicate report',check_note_edit_and_duplicates),
  ('D13 live knowledge after project-file edits',check_knowledge_freshness),
  ('P16 cross-project knowledge search and live context',check_cross_project_knowledge),
  ('Data CSV/JSON/WASM/chart/error and export',check_data),
