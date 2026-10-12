@@ -7,3 +7,12 @@ test('all eight provider routes form authorized HTTPS API payloads',()=>{const r
 test('a successful OpenRouter response records model and reported usage',async()=>{const original=globalThis.fetch;globalThis.fetch=async(url,opts)=>({ok:true,status:200,text:async()=>JSON.stringify({model:'openrouter/free',choices:[{message:{content:'hello test'}}],usage:{prompt_tokens:4,completion_tokens:2,total_tokens:6}})});try{const r=await callProvider('openrouter',key,[{role:'user',content:'say hello'}]);assert.equal(r.text,'hello test');assert.equal(r.usage.total_tokens,6);assert.equal(r.usage.source,'provider_reported');}finally{globalThis.fetch=original;}});
 test('Gemini direct REST response parser',async()=>{const orig=globalThis.fetch;globalThis.fetch=async()=>({ok:true,status:200,text:async()=>JSON.stringify({candidates:[{content:{parts:[{text:'Gemini response'}]}}],usageMetadata:{totalTokenCount:3}})});try{const r=await callProvider('gemini',{...key,model:'gemini-2.5-flash-lite'},[{role:'user',content:'hi'}]);assert.equal(r.text,'Gemini response');assert.equal(r.usage.total_tokens,3);}finally{globalThis.fetch=orig;}});
 test('errors distinguish CORS failures and unauthorized plan',async()=>{const orig=globalThis.fetch;globalThis.fetch=async()=>{throw TypeError('Failed to fetch')};try{await assert.rejects(()=>callProvider('openrouter',key,[{role:'user',content:'x'}]),/CORS/)}finally{globalThis.fetch=orig;}assert.throws(()=>buildRequest('openrouter',{...key,attested:false},[{role:'user',content:'x'}]),/attestation/);});
+
+test('P28 deadline aborts stalled requests once',async()=>{
+ const original=globalThis.fetch;let attempts=0;
+ globalThis.fetch=(_url,options)=>{attempts++;return new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(options.signal.reason),{once:true}));};
+ try{
+  await assert.rejects(callProvider('openrouter',key,[{role:'user',content:'check'}],{timeoutMs:25}),/timed out/);
+  assert.equal(attempts,1);
+ }finally{globalThis.fetch=original;}
+});
