@@ -110,7 +110,8 @@ def main():
    assert page.locator('#key-value').input_value()=='typed-before-unlock'
    page.locator('#save-key').click()
    assert page.locator('#key-value').input_value()=='typed-before-unlock'
-   assert 'Create or unlock your vault' in page.locator('#vault-entry-hint').inner_text() or 'first' in page.locator('#toast').inner_text()
+   assert 'first create or unlock' in page.locator('#vault-entry-hint').inner_text().lower()
+   assert 'First create or unlock' in page.locator('#toast').inner_text()
    page.locator('#vault-password').fill('not-a-real-key-test-passphrase')
    page.locator('#vault-submit').click()
    print('REGRESSION WAIT 10',flush=True)
