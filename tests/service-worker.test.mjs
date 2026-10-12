@@ -5,16 +5,16 @@ import vm from 'node:vm';
 
 const source=readFileSync(new URL('../sw.js',import.meta.url),'utf8');
 const base='https://example.github.io/multi-model-ai-platform/';
-function harness({online=true}={}){
+function harness({online=true,refreshFails=false}={}){
   const callbacks={},items=new Map();
-  const cache={addAll:async()=>{},put:async(request,response)=>{items.set(request.url,response);}};
+  const cache={addAll:async()=>{if(refreshFails)throw Error('cache update blocked');},put:async(request,response)=>{items.set(request.url,response);}};
   const caches={open:async()=>cache,keys:async()=>[],delete:async()=>true,match:async(request)=>items.get(request.url)||null};
   const self={location:{origin:new URL(base).origin},registration:{scope:base},clients:{claim:async()=>{}},skipWaiting:async()=>{},addEventListener:(kind,cb)=>callbacks[kind]=cb};
   const net={online:true};net.online=online;
   const fetch=async()=>{if(!net.online)throw Error('offline');return new Response('new version',{status:200});};
-  vm.runInNewContext(source,{self,caches,fetch,URL});
+  vm.runInNewContext(source,{self,caches,fetch,URL,Request});
   const navigate=async url=>{let result=null;const request=new Request(url);callbacks.fetch({request,respondWith:promise=>{result=promise;}});return result===null?null:await result;};
-  return {navigate,net,items};
+  const refresh=async()=>{let completion,reply;callbacks.message({data:{type:'REFRESH'},ports:[{postMessage:message=>{reply=message;}}],waitUntil:promise=>{completion=promise;}});await completion;return reply;};return {navigate,net,items,refresh};
 }
 
 test('service worker prefers new code from network over an older cached shell',async()=>{
@@ -33,4 +33,12 @@ test('service worker refuses cross-origin and out-of-scope interception',async()
   const h=harness();assert.equal(await h.navigate('https://api.groq.com/chat'),null);
   assert.equal(await h.navigate('https://example.github.io/another-site/index.html'),null);
   assert.equal(await h.navigate(base+'sw.js'),null);
+});
+
+test('D16: offline refresh acknowledges completed shell update',async()=>{
+ const h=harness();const reply=await h.refresh();assert.equal(reply.ok,true);
+});
+test('D16: offline refresh reports cache update failure',async()=>{
+ const h=harness({refreshFails:true});const reply=await h.refresh();
+ assert.equal(reply.ok,false);assert.match(reply.error,/cache update blocked/);
 });
