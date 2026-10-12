@@ -23,10 +23,12 @@ def main():
    page.locator('[data-view="datalab"]').first.click()
    page.locator('#data-input').fill('label,value\nAlpha,10\nMissing,\nCharlie,20')
    page.locator('#data-analyze').click()
+   print('REGRESSION WAIT 1',flush=True)
    page.wait_for_function("document.querySelector('#data-status').textContent.includes('mean 15.00')")
    assert page.locator('#data-table tbody tr').count()==3
    page.locator('#data-input').fill('bad,columns\n"unterminated')
    page.locator('#data-analyze').click()
+   print('REGRESSION WAIT 2',flush=True)
    page.wait_for_function("document.querySelector('#data-status').textContent.startsWith('Analysis failed:')")
    assert page.locator('#data-table tbody tr').count()==0
    page.locator('[data-view="workflows"]').first.click()
@@ -44,20 +46,24 @@ def main():
    backup=json.loads(Path(download.path()).read_text())
    invalid={**backup,'threads':[]}
    page.locator('#restore-all').set_input_files({'name':'broken.json','mimeType':'application/json','buffer':json.dumps(invalid).encode()})
+   print('REGRESSION WAIT 3',flush=True)
    page.wait_for_function("document.querySelector('#toast').textContent.includes('Restore failed')")
    candidate=json.loads(json.dumps(backup));candidate['projects'][0]['name']='Restored Project Marker'
    payload={'name':'valid.json','mimeType':'application/json','buffer':json.dumps(candidate).encode()}
    page.on('dialog',lambda d:d.accept())
    page.evaluate("""() => {window._transactionOriginal=IDBDatabase.prototype.transaction;IDBDatabase.prototype.transaction=function(name,mode){if(mode==='readwrite')throw Error('Injected write failure');return window._transactionOriginal.call(this,name,mode)}}""")
    page.locator('#restore-all').set_input_files(payload)
+   print('REGRESSION WAIT 4',flush=True)
    page.wait_for_function("document.querySelector('#toast').textContent.includes('Injected write failure')")
    assert page.locator('#stat-project').inner_text() != 'Restored Project Marker'
    page.evaluate('() => { IDBDatabase.prototype.transaction=window._transactionOriginal; }')
    page.locator('#restore-all').set_input_files(payload)
+   print('REGRESSION WAIT 5',flush=True)
    page.wait_for_function("document.querySelector('#toast').textContent.includes('Workspace restored and saved')")
    assert page.locator('#stat-project').inner_text()=='Restored Project Marker'
    page.evaluate("""() => {IDBDatabase.prototype.transaction=function(name,mode){if(mode==='readwrite')throw Error('Injected write failure');return window._transactionOriginal.call(this,name,mode)}}""")
    page.locator('#reset-all').click()
+   print('REGRESSION WAIT 6',flush=True)
    page.wait_for_function("document.querySelector('#toast').textContent.includes('Reset was not applied: Injected write failure')")
    assert page.locator('#stat-project').inner_text()=='Restored Project Marker'
    page.evaluate('() => { IDBDatabase.prototype.transaction=window._transactionOriginal; }')
@@ -70,14 +76,17 @@ def main():
    page.locator('#knowledge-title').fill('Important reference')
    page.locator('#knowledge-content').fill('Reference data: 128')
    page.locator('#knowledge-form button[type="submit"]').click()
+   print('REGRESSION WAIT 7',flush=True)
    page.wait_for_function("document.querySelector('#note-count').textContent.includes('1')")
    with page.expect_download() as info:page.locator('#knowledge-export').click()
    body=Path(info.value.path()).read_bytes()
    assert json.loads(body)['format']=='mm-studio-notes-v1'
    page.locator('#knowledge-results button').first.click()
    page.locator('#knowledge-delete').click()
+   print('REGRESSION WAIT 8',flush=True)
    page.wait_for_function("document.querySelector('#note-count').textContent.includes('0')")
    page.locator('#knowledge-import').set_input_files({'name':'mm-knowledge.json','mimeType':'application/json','buffer':body})
+   print('REGRESSION WAIT 9',flush=True)
    page.wait_for_function("document.querySelector('#note-count').textContent.includes('1')")
    page.locator('#knowledge-results button').first.click()
    assert 'Reference data: 128' in page.locator('#knowledge-preview').inner_text()
@@ -89,6 +98,7 @@ def main():
    page.locator('[data-view="vault"]').first.click()
    page.locator('#vault-password').fill('not-a-real-key-test-passphrase')
    page.locator('#vault-submit').click()
+   print('REGRESSION WAIT 10',flush=True)
    page.wait_for_function("document.querySelector('#vault-status').textContent==='UNLOCKED'",timeout=12000)
    def save_provider(route,key,account=''):
     page.locator('#key-provider').select_option(route)
@@ -96,6 +106,7 @@ def main():
     page.locator('#key-account').fill(account)
     page.locator('#key-attest').check()
     page.locator('#save-key').click()
+    print('REGRESSION WAIT 11',flush=True)
     page.wait_for_function("document.querySelector('#toast').textContent.includes('Encrypted key slot saved')")
    save_provider('groq','dummy-groq-key')
    save_provider('cloudflare','dummy-cloudflare-key','0'*32)
@@ -116,6 +127,7 @@ def main():
    print('PASS: corrected numeric stats, stale error handling, workflow cap, safe backup failure, note roundtrip, Cloudflare account, explicit comparison route')
    return 0
   except Exception as exc:
-   print('FAIL: B0.3.3 browser regressions: '+str(exc)[:1800]);return 1
+   import traceback
+   print('FAIL: B0.3.3 browser regressions: '+traceback.format_exc()[-3000:],flush=True);return 1
 
 if __name__=='__main__':sys.exit(main())
