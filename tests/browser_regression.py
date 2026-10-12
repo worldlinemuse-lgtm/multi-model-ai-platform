@@ -52,7 +52,7 @@ def main():
    page.locator('#restore-all').set_input_files(payload)
    page.wait_for_function("document.querySelector('#toast').textContent.includes('Injected write failure')")
    assert page.locator('#stat-project').inner_text() != 'Restored Project Marker'
-   page.evaluate('IDBDatabase.prototype.transaction=window._transactionOriginal')
+   page.evaluate('() => { IDBDatabase.prototype.transaction=window._transactionOriginal; }')
    page.locator('#restore-all').set_input_files(payload)
    page.wait_for_function("document.querySelector('#toast').textContent.includes('Workspace restored and saved')")
    assert page.locator('#stat-project').inner_text()=='Restored Project Marker'
@@ -60,7 +60,7 @@ def main():
    page.locator('#reset-all').click()
    page.wait_for_function("document.querySelector('#toast').textContent.includes('Reset was not applied: Injected write failure')")
    assert page.locator('#stat-project').inner_text()=='Restored Project Marker'
-   page.evaluate('IDBDatabase.prototype.transaction=window._transactionOriginal')
+   page.evaluate('() => { IDBDatabase.prototype.transaction=window._transactionOriginal; }')
    assert not errors,errors
    context.close()
 
