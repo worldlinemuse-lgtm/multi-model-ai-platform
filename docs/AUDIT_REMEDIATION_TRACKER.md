@@ -36,7 +36,9 @@ There are 60 baseline items: 17 D, 33 P and 10 N. This tracker is a **post-basel
 
 - **P02 (verified real hosted scope) / PR #11 / main `de867bacb64026d1763a761b61edcd08b83c874f`:** real Pyodide loaded from CDN in checkout and public hosted Chromium; verified Python stdout, completion, Stop state, and truthful runtime status. Branch run `38317353622` passed, post-merge run `38317526561` all stages **SUCCESS**. Persistent Python kernels/offline Python packages remain open.
 
-- **P15 branch-only:** explicit saved-note editing with confirmation/cancel, preserved ID/timestamps and non-destructive exact-content duplicate reporting, plus Node and real Chromium tests. Pending PR CI/deployment.
+- **P15 (partial) / PR #12 / main `13b3a1b04ed5e5dcdb470973d55b97b5e484ba04`:** confirmed saved-note editing/cancel, preserved provenance and exact-content duplicate report. PR branch CI `38318035400` SUCCESS. Post-merge production run `38318201795` still pending hosted acceptance at this checkpoint. Structured import, semantic deduplication and note version history remain open.
+
+- **P30 (branch-only):** read-only local feature checks for Worker, IndexedDB, minimal WASM, WebGPU presence, speech, secure context, service-worker controller, persistence and microphone-permission state; provider health remains NOT VERIFIED. Pending branch CI and hosted QA.
 
 ## Acceptance / security constraints
 
