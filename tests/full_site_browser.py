@@ -279,6 +279,43 @@ def check_data(p):
     p.locator('#data-analyze').click()
     verify('Analysis failed:' in p.locator('#data-status').inner_text(),'Invalid data not rejected')
     verify(p.locator('#data-table tbody tr').count()==0,'Old data remained after parse error')
+def check_data_persistence_transforms(p):
+    screen(p,'datalab')
+    csv='name,score\\nAlpha,10\\nBeta,25\\nGamma,'
+    p.locator('#data-input').fill(csv.replace('\\n',chr(10)))
+    p.locator('#data-analyze').click()
+    p.locator('#data-transform').select_option('filter-gt')
+    p.locator('#data-transform-field').select_option('score')
+    p.locator('#data-transform-value').fill('11')
+    p.locator('#data-transform-apply').click()
+    verify(p.locator('#data-table tbody tr').count()==1,'P19 filter did not keep exactly one row')
+    verify('Beta' in p.locator('#data-table').inner_text(),'P19 wrong row after numeric filter')
+    p.locator('#data-transform-undo').click()
+    verify(p.locator('#data-table tbody tr').count()==3,'P19 undo did not recover all rows')
+    p.locator('#data-transform').select_option('sort-desc')
+    p.locator('#data-transform-field').select_option('score')
+    p.locator('#data-transform-apply').click()
+    verify('3 rows' in p.locator('#data-status').inner_text(),'P19 sorting lost rows')
+    p.locator('#data-transform-undo').click()
+    approve(p,'QA saved dataset')
+    p.locator('#data-save').click()
+    p.wait_for_function("() => document.querySelector('#data-saved').options.length === 2",timeout=12000)
+    verify('QA saved dataset' in p.locator('#data-saved').inner_text(),'P18 saved dataset missing')
+    screen(p,'settings')
+    with p.expect_download() as saved:p.locator('#backup-all').click()
+    backup=json.loads(Path(saved.value.path()).read_text())
+    verify(len(backup.get('datasets',[]))==1,'P18 named dataset not in full backup')
+    p.reload(wait_until='domcontentloaded')
+    screen(p,'datalab')
+    verify(p.locator('#data-saved option').count()==2,'P18 saved dataset lost on reload')
+    p.locator('#data-saved').select_option(label='QA saved dataset')
+    p.locator('#data-load').click()
+    verify(p.locator('#data-table tbody tr').count()==3,'P18 persisted dataset reload incomplete')
+    approve(p)
+    p.locator('#data-delete').click()
+    p.wait_for_function("() => document.querySelector('#data-saved').options.length === 1",timeout=12000)
+    verify(p.locator('#data-saved option').count()==1,'P18 deleted saved dataset still listed')
+
 def check_health_and_data_pages(p):
     screen(p,'overview')
     health=p.locator('#health-list')
@@ -436,6 +473,7 @@ CASES=[
  ('D13 live knowledge after project-file edits',check_knowledge_freshness),
  ('P16 cross-project knowledge search and live context',check_cross_project_knowledge),
  ('Data CSV/JSON/WASM/chart/error and export',check_data),
+ ('P18/P19 named datasets, transformations, undo and backup roundtrip',check_data_persistence_transforms),
  ('D09 dynamic health and P17 paginated data/chart coverage',check_health_and_data_pages),
  ('Canvas media adjustments, PNG and speech controls',check_media),
  ('Preferences, backup, restore rejection, persisted settings and reset',check_settings),
