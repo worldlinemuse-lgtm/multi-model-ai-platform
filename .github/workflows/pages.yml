@@ -74,5 +74,7 @@ jobs:
           python -m pip install playwright==1.57.0
           python -m playwright install --with-deps chromium
       - name: Real Chromium acceptance on public GitHub Pages
-        run: python tests/browser_smoke.py --base-url "$DEPLOYED_URL"
+        run: |
+          set -euo pipefail
+          python tests/browser_smoke.py --base-url "$DEPLOYED_URL"
           python tests/browser_regression.py --base-url "$DEPLOYED_URL"
