@@ -209,10 +209,10 @@ def test_vault_lifecycle(page,context):
     assert page.locator('.vault-item').count()==1
     page.on('dialog',lambda d:d.accept())
     page.locator('.vault-item button').click()
-    assert page.locator('.vault-item').count()==0
+    page.wait_for_function('document.querySelectorAll(".vault-item").length === 0',timeout=7000)
     save_key(page)
     page.locator('#vault-wipe').click()
-    page.wait_for_function('document.querySelector("#vault-status").textContent === "NOT CREATED"')
+    page.wait_for_function('document.querySelector("#vault-status").textContent === "NOT CREATED"',timeout=10000)
 
 
 def test_provider_directory(page,context):
