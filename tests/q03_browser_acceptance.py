@@ -9,7 +9,7 @@ from playwright.sync_api import sync_playwright
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 with sync_playwright() as p:
-        browser_path=os.environ.get('CHROMIUM_EXECUTABLE') or ('/usr/bin/chromium' if pathlib.Path('/usr/bin/chromium').exists() else None)
+        browser_path=os.environ.get('CHROMIUM_EXECUTABLE')
         browser=p.chromium.launch(headless=True,args=['--no-sandbox'],**({'executable_path':browser_path} if browser_path else {}))
         print('Q03_DIAG chromium_version',browser.version,flush=True)
         browser.on('disconnected',lambda:print('Q03_DIAG browser_disconnected',flush=True))
