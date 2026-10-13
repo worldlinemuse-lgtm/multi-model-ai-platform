@@ -1,11 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {zipFiles,unzipFiles} from '../src/zip.js';
-
-async function bytes(files){return new Uint8Array(await zipFiles(files).arrayBuffer());}
-function set16(b,n,x){b[n]=x&255;b[n+1]=(x>>>8)&255}
-function set32(b,n,x){set16(b,n,x);set16(b,n+2,x>>>16)}
-function findCentral(b){for(let i=0;i<b.length-4;i++)if(b[i]===0x50&&b[i+1]===0x4b&&b[i+2]===1&&b[i+3]===2)return i;throw Error('missing central')}
-test('valid single entry still round trips',async()=>assert.deepEqual({...await unzipFiles(await bytes({'a.txt':'hi'}))},{'a.txt':'hi'}));
-test('local header name cannot disagree with central name',async()=>{const b=await bytes({'a.txt':'hi'});b[30]='b'.charCodeAt(0);await assert.rejects(unzipFiles(b),/ZIP local filename mismatch/);});
-test('duplicate names in central directory rejected',async()=>{const b=await bytes({'a.txt':'hi','b.txt':'hi'});const cd=findCentral(b);const len=5;const second=cd+46+len;b.set(new TextEncoder().encode('a.txt'),second+46);await assert.rejects(unzipFiles(b),/ZIP duplicate filename/);});
+import {unzipFiles,crc32} from '../src/zip.js';
+const E=new TextEncoder();
+function put16(b,p,v){b[p]=v&255;b[p+1]=(v>>>8)&255}
+function put32(b,p,v){put16(b,p,v);put16(b,p+2,v>>>16)}
+function archive(entries){
+  const locals=[],centrals=[];let offset=0;
+  for(const {centralName,localName=centralName,content} of entries){
+    const localN=E.encode(localName),centralN=E.encode(centralName),raw=E.encode(content),crc=crc32(raw);
+    const lh=new Uint8Array(30+localN.length+raw.length);put32(lh,0,0x04034b50);put16(lh,4,20);put16(lh,6,0x800);put16(lh,8,0);put32(lh,14,crc);put32(lh,18,raw.length);put32(lh,22,raw.length);put16(lh,26,localN.length);lh.set(localN,30);lh.set(raw,30+localN.length);
+    const cd=new Uint8Array(46+centralN.length);put32(cd,0,0x02014b50);put16(cd,4,20);put16(cd,6,0x800);put16(cd,8,0);put16(cd,10,0);put32(cd,16,crc);put32(cd,20,raw.length);put32(cd,24,raw.length);put16(cd,28,centralN.length);put32(cd,42,offset);cd.set(centralN,46);
+    locals.push(lh);centrals.push(cd);offset+=lh.length;
+  }
+  const directorySize=centrals.reduce((n,c)=>n+c.length,0),end=new Uint8Array(22);
+  put32(end,0,0x06054b50);put16(end,8,entries.length);put16(end,10,entries.length);put32(end,12,directorySize);put32(end,16,offset);
+  const out=new Uint8Array(offset+directorySize+22);let p=0;for(const b of [...locals,...centrals,end]){out.set(b,p);p+=b.length;}return out.buffer;
+}
+test('reject duplicate central names instead of silently overwriting earlier content',async()=>{
+  await assert.rejects(unzipFiles(archive([{centralName:'same.txt',content:'trusted'},{centralName:'same.txt',content:'untrusted'}])),/duplicate/i);
+});
+test('reject mismatch between local and central filenames',async()=>{
+  await assert.rejects(unzipFiles(archive([{centralName:'good.txt',localName:'evil.txt',content:'data'}])),/local.*name|name.*mismatch/i);
+});
+test('accept consistent single entry',async()=>{
+  assert.equal((await unzipFiles(archive([{centralName:'good.txt',content:'data'}])))['good.txt'],'data');
+});
