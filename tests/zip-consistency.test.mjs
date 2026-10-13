@@ -9,7 +9,7 @@ function archive(entries){
   for(const {centralName,localName=centralName,content} of entries){
     const localN=E.encode(localName),centralN=E.encode(centralName),raw=E.encode(content),crc=crc32(raw);
     const lh=new Uint8Array(30+localN.length+raw.length);put32(lh,0,0x04034b50);put16(lh,4,20);put16(lh,6,0x800);put16(lh,8,0);put32(lh,14,crc);put32(lh,18,raw.length);put32(lh,22,raw.length);put16(lh,26,localN.length);lh.set(localN,30);lh.set(raw,30+localN.length);
-    const cd=new Uint8Array(46+centralN.length);put32(cd,0,0x02014b50);put16(cd,4,20);put16(cd,6,0x800);put16(cd,8,0);put16(cd,10,0);put32(cd,16,crc);put32(cd,20,raw.length);put32(cd,24,raw.length);put16(cd,28,centralN.length);put32(cd,42,offset);cd.set(centralN,46);
+    const cd=new Uint8Array(46+centralN.length);put32(cd,0,0x02014b50);put16(cd,4,20);put16(cd,6,20);put16(cd,8,0x800);put16(cd,10,0);put32(cd,16,crc);put32(cd,20,raw.length);put32(cd,24,raw.length);put16(cd,28,centralN.length);put32(cd,42,offset);cd.set(centralN,46);
     locals.push(lh);centrals.push(cd);offset+=lh.length;
   }
   const directorySize=centrals.reduce((n,c)=>n+c.length,0),end=new Uint8Array(22);
