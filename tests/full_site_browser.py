@@ -240,6 +240,13 @@ def check_chat(p):
     with p.expect_download() as obj:p.locator('#export-audit').click()
     audit=json.loads(Path(obj.value.path()).read_text())
     verify(any(e['status']=='success' for e in audit),'Audit export contains no successful request')
+    success=[e for e in audit if e['op']=='inference' and e['status']=='success']
+    started=[e for e in audit if e['op']=='inference' and e['status']=='requested']
+    verify(success and started and success[0].get('requestId')==started[0].get('requestId'),'Q10 request IDs do not correlate')
+    verify(success[0].get('model')=='llama-3.1-8b-instant','Q10 provider-reported model mismatch')
+    verify(isinstance(success[0].get('latencyMs'),int),'Q10 no measured latency')
+    verify(success[0].get('httpStatus')==200,'Q10 HTTP outcome missing')
+    verify('TEST-FAKE-NOT-A-REAL-API-KEY' not in json.dumps(audit),'Q10 audit leaked test credential')
     approve(p)
     p.locator('#clear-audit').click()
     verify(p.locator('#usage-total').inner_text()=='0','Clear audit failed')
