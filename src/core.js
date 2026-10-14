@@ -67,7 +67,7 @@ export function safeFiles(files){return files && typeof files==='object'&&!Array
 export function starterProject(name='First project'){return {id:uid('project'),name,active:'main.js',updated:now(),files:{'main.js':'// Run with ▶ Run code. This runs in an isolated Web Worker.\nconst message = "Hello from Multi-Model Studio!";\nconsole.log(message);\nconsole.log("2 + 2 =", 2 + 2);','index.html':'<!doctype html>\n<html><head><title>My first preview</title></head><body>\n<h1>Hello from the browser workbench!</h1>\n<p>Edit this file and press Preview HTML.</p>\n<button onclick="document.getElementById(\'result\').textContent = \'It works!\'">Test interaction</button>\n<p id="result"></p>\n</body></html>','style.css':'body { font: 16px system-ui; padding: 28px; color: #1d2b43; }\nh1 { color: #4162c6; }\nbutton { background: #4162c6; color: white; border: 0; padding: 10px; border-radius: 8px; }','hello.py':'print("Python is running inside WebAssembly!")\nprint("2 + 2 =", 2 + 2)'}};}
 import {validateSavedDatasets} from './data-tools.js';
 import {validateSavedWorkflowPlan} from './workflow-plan.js';
-export function freshState(){const p=starterProject();const thread={id:uid('thread'),title:'New conversation',created:now(),messages:[]};return {format:APP_KEY,projects:[p],activeProjectId:p.id,snapshots:[],threads:[thread],activeThreadId:thread.id,notes:[],audit:[],workflows:[],datasets:[],preferences:{accent:'cyan',compact:false},created:now()};}
+export function freshState(){const p=starterProject();const thread={id:uid('thread'),title:'New conversation',created:now(),messages:[]};return {format:APP_KEY,projects:[p],activeProjectId:p.id,snapshots:[],threads:[thread],activeThreadId:thread.id,notes:[],audit:[],workflows:[],datasets:[],preferences:{accent:'cyan',compact:false,maxOutputTokens:512},created:now()};}
 const record = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const textField = (v,max=100000) => typeof v === 'string' && v.length <= max;
 const idField = v => textField(v,140) && v.length > 0;
@@ -90,7 +90,7 @@ export function validateState(s){
  if(!Array.isArray(s.audit)||s.audit.length>MAX_AUDIT||!s.audit.every(validAudit))return false;
  if(!Array.isArray(s.workflows)||s.workflows.length>40||!s.workflows.every(validWorkflow))return false;
   if(!validateSavedDatasets(s.datasets))return false;
- return record(s.preferences) && ['cyan','violet','amber'].includes(s.preferences.accent) && typeof s.preferences.compact==='boolean';
+ return record(s.preferences) && ['cyan','violet','amber'].includes(s.preferences.accent) && typeof s.preferences.compact==='boolean' && (s.preferences.maxOutputTokens===undefined||[128,256,512,1024].includes(s.preferences.maxOutputTokens));
 }
 export function historyForRoute(messages,route){
  return messages.filter(m=>m && (m.role==='user'||(m.role==='assistant'&&m.provider===route&&!m.error)))

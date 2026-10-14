@@ -225,9 +225,18 @@ def check_chat(p):
     setup_vault(p)
     screen(p,'chat')
     p.locator('#chat-route').select_option('groq')
+    token_caps=[]
+    def inspect_cap(route):
+        if route.request.method!='OPTIONS':
+            try:token_caps.append(json.loads(route.request.post_data or '{}').get('max_tokens'))
+            except (ValueError,TypeError):token_caps.append(None)
+        fake_groq(route)
+    p.route('https://api.groq.com/**',inspect_cap)
+    p.locator('#chat-output-tokens').select_option('256')
     p.locator('#chat-input').fill('QA synthetic message')
     p.locator('#send-chat').click()
     p.wait_for_function("document.querySelector('#chat-messages').textContent.includes('SYNTHETIC ACCEPTANCE RESPONSE')",timeout=12000)
+    verify(token_caps==[256],'Q20 request did not use selected 256-token cap')
     verify(p.locator('#chat-messages .bubble.user').count()==1,'User message not saved')
     verify(p.locator('#chat-messages .bubble.assistant').count()==1,'Synthetic response not shown')
     p.locator('#new-chat').click()
