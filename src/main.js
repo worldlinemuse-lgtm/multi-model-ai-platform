@@ -13,6 +13,7 @@ import {setupWasmImport} from './wasm-ui.js';
 import {setupExpressionRepl} from './expression-repl-ui.js';
 import {projectFolders,projectTreeEntries,moveProjectFolder,copyProjectFolder} from './project-files.js';
 import {parseNoteArchive,exportNoteArchive} from './knowledge.js';
+import {binaryRecord,decodeBinaryRecord,validateBinaryAssets,exportBinaryBytes,BINARY_TYPES,MAX_BINARY_FILE_BYTES} from './binary-assets.js';
 import {knowledgePage} from './knowledge-pages.js';
 import {retrieveLocalEvidence,formatLocalEvidence} from './local-evidence.js';
 import {prepareTextEdit,applyTextEdit,rollbackTextEdit} from './review-edits.js';
@@ -28,6 +29,7 @@ const guideById=new Map((window.MM_PROVIDER_GUIDES||[]).map(g=>[g.id,g]));
 const vault=new KeyVault();
 let state,run,labs,capabilityProbeEpoch=0,pythonRuntimeStatus='UNTESTED',lastRunLang=null,activeView='overview',activeNote=null,editingNoteId=null,saveTimer=null,toastTimer=null,activeChatControllers=[],workflowController=null,storageFailed=false,recoveryRaw=null,recoveryKind=null;
 const $=el;
+let selectedBinaryName=null,selectedBinaryProjectId=null,binaryPreviewURL=null;
 let localEvidenceDraft='';let currentKnowledgePage=0;
 let q04Pending=null,q04PendingProjectId=null,q04PendingPath=null,q04Rollback=null,q04RollbackProjectId=null;
 function toast(message,error=false){const t=$('toast');t.textContent=String(message).slice(0,400);t.classList.toggle('error',error);t.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.hidden=true,5200);}
@@ -46,7 +48,63 @@ function selectView(view){if(!VIEWS[view])return;activeView=view;for(const node 
 function renderHealth(){const checks=[['Browser storage',!storageFailed&&isDurableStorage()?'PERSISTENT':'TEMPORARY'],['JavaScript Workers',typeof Worker==='function'?'AVAILABLE':'UNAVAILABLE'],['Key vault',vault.isUnlocked?'UNLOCKED':'LOCKED'],['Provider calls','UNVERIFIED'],['Python execution',pythonRuntimeStatus],['Offline shell',navigator.serviceWorker?.controller?'CONTROLLING':'INACTIVE']];const host=clearNode($('health-list'));for(const [name,status] of checks){const row=make('div','health-line');row.append(make('span','health-icon pending','○'),make('span','',name),make('strong','',status));host.append(row);}}
 function renderStats(){const p=project();$('stat-project').textContent=p?.name||'Workspace';$('stat-files').textContent=Object.keys(p?.files||{}).length;$('stat-routes').textContent=routeDescription(vault.count);$('stat-requests').textContent=String(state.audit.filter(x=>x.op==='inference').length);$('sidebar-runtime').textContent=`${state.projects.length} project(s) · ${vault.count} saved key slot(s)`;$('connection-badge').textContent=vault.isUnlocked&&vault.count?'● KEY VAULT UNLOCKED':'● LOCAL MODE';renderHealth();}
 function renderProjectSelector(){const select=$('project-select'),old=select.value;select.replaceChildren();for(const p of state.projects){const option=new Option(p.name,p.id);select.add(option);}select.value=state.activeProjectId;const snaps=$('snapshot-select'),prior=snaps.value;snaps.replaceChildren(new Option('Choose snapshot…',''));state.snapshots.filter(s=>s.project.id===state.activeProjectId).slice().reverse().forEach(s=>snaps.add(new Option(`${s.pinned?'📌 ':''}${s.label} · ${formatTime(s.at)}`,s.id)));if([...snaps.options].some(o=>o.value===prior))snaps.value=prior;renderSnapshotActions();}
-function renderFiles(){renderProjectSelector();const p=project();const tree=clearNode($('file-tree'));for(const entry of projectTreeEntries(p.files)){if(entry.type==='folder'){const heading=make('div','folder-entry','📁 '+entry.path.split('/').at(-1));heading.title=entry.path;heading.style.paddingLeft=Math.min(11+entry.depth*14,60)+'px';tree.append(heading);continue;}const name=entry.path;const button=make('button','file-entry'+(name===p.active?' active':''),`${name.toLowerCase().endsWith('.py')?'🐍':name.toLowerCase().endsWith('.html')?'◇':name.toLowerCase().endsWith('.css')?'▥':'▤'} ${name.split('/').at(-1)}`);button.type='button';button.title=name;button.style.paddingLeft=Math.min(11+entry.depth*14,60)+'px';button.addEventListener('click',()=>{p.active=name;renderFiles();saveSoon()});tree.append(button);}const editor=$('code-editor');if(editor.value!==p.files[p.active])editor.value=p.files[p.active]||'';$('active-file').textContent=p.active;renderGutter();renderStats();q04SyncButtons();}
+function revokeBinaryAssetURL(){
+ if(binaryPreviewURL){URL.revokeObjectURL(binaryPreviewURL);binaryPreviewURL=null;}
+}
+function renderBinaryAssets(){
+ const p=project(),assets=p.binaryAssets||{},host=clearNode($('binary-assets-list')),preview=$('binary-asset-preview');
+ if(selectedBinaryProjectId!==p.id||!Object.hasOwn(assets,selectedBinaryName||'')){
+  selectedBinaryName=null;selectedBinaryProjectId=p.id;revokeBinaryAssetURL();
+ }
+ const names=Object.keys(assets).sort((a,b)=>a.localeCompare(b));
+ for(const name of names){
+  const rec=assets[name],button=make('button','history-entry'+(name===selectedBinaryName?' active':''),name+' · '+rec.bytes+' B · '+rec.mime);
+  button.type='button';button.addEventListener('click',()=>{selectedBinaryName=name;selectedBinaryProjectId=p.id;renderBinaryAssets();});
+  host.append(button);
+ }
+ if(!names.length)host.append(make('p','hint-line','No binary assets stored in this project.'));
+ $('binary-asset-delete').disabled=!selectedBinaryName;
+ if(!selectedBinaryName){preview.textContent='Choose a local image/audio file to preview.';return;}
+ try{
+  const rec=assets[selectedBinaryName],raw=decodeBinaryRecord(selectedBinaryName,rec);
+  revokeBinaryAssetURL();
+  binaryPreviewURL=URL.createObjectURL(new Blob([raw],{type:rec.mime}));
+  const media=make(rec.mime.startsWith('image/')?'img':'audio');
+  media.src=binaryPreviewURL;
+  media.setAttribute('aria-label','Local media preview: '+selectedBinaryName);
+  if(rec.mime.startsWith('image/')){media.alt=selectedBinaryName;media.style.maxWidth='100%';media.style.maxHeight='260px';}
+  else media.controls=true;
+  preview.replaceChildren(make('p','',selectedBinaryName+' · '+rec.mime),media);
+ }catch(error){revokeBinaryAssetURL();preview.textContent='Preview rejected: '+errorText(error);}
+}
+async function importBinaryAssets(input){
+ const chosen=Array.from(input.files||[]);input.value='';
+ if(!chosen.length)return;
+ const p=project(),previous=p.binaryAssets||{},next={...previous};
+ try{
+  if(chosen.length>8)throw Error('Select at most eight media files at once.');
+  for(const file of chosen){
+   if(file.size>MAX_BINARY_FILE_BYTES||file.size<4)throw Error(file.name+': 400 KB limit or empty file.');
+   if(!safeName(file.name)||Object.hasOwn(p.files,file.name)||Object.hasOwn(next,file.name))throw Error(file.name+': invalid name or collision.');
+   next[file.name]=binaryRecord(file.name,await file.arrayBuffer());
+  }
+  if(!validateBinaryAssets(next,p.files))throw Error('Project media total exceeds 1.25 MB or eight assets.');
+  p.binaryAssets=next;p.updated=now();
+  try{await saveNow();}catch(error){p.binaryAssets=previous;throw error;}
+  selectedBinaryName=chosen.at(-1).name;selectedBinaryProjectId=p.id;renderBinaryAssets();
+  toast(chosen.length+' local media asset(s) saved. No files uploaded.');
+ }catch(error){toast('Binary import rejected: '+errorText(error),true);}
+}
+async function removeBinaryAsset(){
+ const p=project(),name=selectedBinaryName;if(!name||!Object.hasOwn(p.binaryAssets||{},name))return;
+ if(!confirm('Remove the locally saved asset '+name+' from this project? Export a project backup first if necessary.'))return;
+ const previous=p.binaryAssets,updated={...previous};delete updated[name];
+ p.binaryAssets=updated;p.updated=now();
+ try{await saveNow();selectedBinaryName=null;revokeBinaryAssetURL();renderBinaryAssets();toast('Local media asset removed.');}
+ catch(error){p.binaryAssets=previous;toast('Media removal not saved: '+errorText(error),true);}
+}
+function projectZip(){const p=project();return zipFiles({...p.files,...exportBinaryBytes(p.binaryAssets||{})});}
+function renderFiles(){renderProjectSelector();const p=project();const tree=clearNode($('file-tree'));for(const entry of projectTreeEntries(p.files)){if(entry.type==='folder'){const heading=make('div','folder-entry','📁 '+entry.path.split('/').at(-1));heading.title=entry.path;heading.style.paddingLeft=Math.min(11+entry.depth*14,60)+'px';tree.append(heading);continue;}const name=entry.path;const button=make('button','file-entry'+(name===p.active?' active':''),`${name.toLowerCase().endsWith('.py')?'🐍':name.toLowerCase().endsWith('.html')?'◇':name.toLowerCase().endsWith('.css')?'▥':'▤'} ${name.split('/').at(-1)}`);button.type='button';button.title=name;button.style.paddingLeft=Math.min(11+entry.depth*14,60)+'px';button.addEventListener('click',()=>{p.active=name;renderFiles();saveSoon()});tree.append(button);}const editor=$('code-editor');if(editor.value!==p.files[p.active])editor.value=p.files[p.active]||'';$('active-file').textContent=p.active;renderGutter();renderStats();q04SyncButtons();renderBinaryAssets();}
 function renderGutter(){const editor=$('code-editor');const lines=Math.min(2500,editor.value.split('\n').length);$('line-gutter').textContent=Array.from({length:lines},(_,i)=>i+1).join('\n');}
 function editFile(){const p=project(),prior=p.files[p.active];p.files[p.active]=$('code-editor').value;if(!safeFiles(p.files)){p.files[p.active]=prior;$('code-editor').value=prior;toast(`Project limit: ${MAX_FILES} files and ${MAX_PROJECT_BYTES} total characters.`,true);return;}p.updated=now();renderGutter();saveSoon();renderStats();}
 function q04SyncButtons(){
@@ -88,8 +146,8 @@ function q04RollbackEdit(){
 function createProject(){if(state.projects.length>=30)return toast('Maximum 30 projects.',true);const name=prompt('Project name:','Untitled project');if(!name)return;const p=starterProject(name.slice(0,90));state.projects.push(p);state.activeProjectId=p.id;renderFiles();saveSoon();toast('Project created.');}
 function renameProject(){const p=project();const name=prompt('Rename project:',p.name);if(!name)return;p.name=name.slice(0,90);renderProjectSelector();renderStats();saveSoon();}
 function deleteProject(){if(state.projects.length<=1)return toast('Keep at least one project.',true);const p=project();if(!confirm(`Delete project "${p.name}" from this browser? Export a backup first if needed.`))return;state.projects=state.projects.filter(x=>x.id!==p.id);state.activeProjectId=state.projects[0].id;renderFiles();saveSoon();}
-function newFile(){const p=project();const name=prompt('New file name (folders can be included, e.g. src/utils.js):');if(name===null)return;if(!safeName(name)||Object.hasOwn(p.files,name)||Object.keys(p.files).length>=MAX_FILES)return toast('Invalid, duplicate, or excessive filename.',true);p.files[name]='';p.active=name;renderFiles();saveSoon();$('code-editor').focus();}
-function renameFile(){const p=project();const name=prompt('Rename file:',p.active);if(!name||name===p.active)return;if(!safeName(name)||Object.hasOwn(p.files,name))return toast('Invalid or duplicate filename.',true);const result={};for(const [file,text] of Object.entries(p.files))result[file===p.active?name:file]=text;p.files=result;p.active=name;renderFiles();saveSoon();}
+function newFile(){const p=project();const name=prompt('New file name (folders can be included, e.g. src/utils.js):');if(name===null)return;if(!safeName(name)||Object.hasOwn(p.files,name)||Object.hasOwn(p.binaryAssets||{},name)||Object.keys(p.files).length>=MAX_FILES)return toast('Invalid, duplicate, or excessive filename.',true);p.files[name]='';p.active=name;renderFiles();saveSoon();$('code-editor').focus();}
+function renameFile(){const p=project();const name=prompt('Rename file:',p.active);if(!name||name===p.active)return;if(!safeName(name)||Object.hasOwn(p.files,name)||Object.hasOwn(p.binaryAssets||{},name))return toast('Invalid or duplicate filename.',true);const result={};for(const [file,text] of Object.entries(p.files))result[file===p.active?name:file]=text;p.files=result;p.active=name;renderFiles();saveSoon();}
 function copyFolder(){
  const p=project(),folders=projectFolders(p.files);
  if(!folders.length)return toast('This project has no nested folders yet.',true);
@@ -99,6 +157,7 @@ function copyFolder(){
  if(to===null)return;
  try{
   const result=copyProjectFolder(p.files,p.active,from.trim(),to.trim());
+  if(!validateBinaryAssets(p.binaryAssets||{},result.files))throw Error('Folder copy destination collides with saved media asset.');
   if(!confirm('Copy '+result.copied.length+' file(s) into "'+to.trim()+'"? Existing files will remain and will never be overwritten.'))return;
   p.files=result.files;p.updated=now();renderFiles();saveSoon();
   toast('Copied '+result.copied.length+' virtual project files.');
@@ -110,6 +169,7 @@ function moveFolder(){
  const from=prompt('Folder to move (available: '+folders.join(', ')+'):',suggested);if(from===null)return;
  const to=prompt('Move all files in "'+from+'" to which relative folder path? (e.g. src/lib):');if(to===null)return;
  try{const result=moveProjectFolder(p.files,p.active,from.trim(),to.trim());
+ if(!validateBinaryAssets(p.binaryAssets||{},result.files))throw Error('Folder move destination collides with saved media asset.');
  if(!confirm('Move '+result.moved.length+' file(s) from "'+from.trim()+'" into "'+to.trim()+'"? Existing files will not be overwritten.'))return;
  p.files=result.files;p.active=result.active;p.updated=now();renderFiles();saveSoon();toast('Moved '+result.moved.length+' project file(s).');
  }catch(error){toast('Folder move rejected: '+error.message,true);}
@@ -126,7 +186,7 @@ function manageSnapshot(){
  const snap=selectedSnapshot();if(!snap)return toast('Select a saved snapshot first.',true);
  const action=$('snapshot-action').value;
  if(action==='rename'){const entered=prompt('Rename selected snapshot:',snap.label);if(entered===null)return;const name=entered.trim().slice(0,60);if(!name)return toast('Snapshot label cannot be blank.',true);snap.label=name;renderProjectSelector();saveSoon();toast('Snapshot renamed.');return;}
- if(action==='export'){const payload={format:'mm-platform-snapshot-v1',name:snap.project.name,active:snap.project.active,files:snap.project.files,snapshot:{label:snap.label,at:snap.at}};download('snapshot-'+snap.label.replace(/[^a-z0-9_-]/gi,'_')+'.json',JSON.stringify(payload,null,2),'application/json');toast('Snapshot exported as an importable project.');return;}
+ if(action==='export'){const payload={format:'mm-platform-snapshot-v1',name:snap.project.name,active:snap.project.active,files:snap.project.files,snapshot:{label:snap.label,at:snap.at},...(snap.project.binaryAssets?{binaryAssets:snap.project.binaryAssets}:{})};download('snapshot-'+snap.label.replace(/[^a-z0-9_-]/gi,'_')+'.json',JSON.stringify(payload,null,2),'application/json');toast('Snapshot exported as an importable project.');return;}
  if(action==='pin'){snap.pinned=!snap.pinned;renderProjectSelector();saveSoon();toast(snap.pinned?'Snapshot protected from automatic eviction.':'Snapshot unpinned.');return;}
  if(action==='delete'){if(!confirm('Permanently delete snapshot "'+snap.label+'"? This does not delete your current project.'))return;state.snapshots=state.snapshots.filter(s=>s.id!==snap.id);$('snapshot-select').value='';renderProjectSelector();$('snapshot-comparison').hidden=true;saveSoon();toast('Snapshot deleted.');return;}
  if(action==='compare'){
@@ -136,9 +196,34 @@ function manageSnapshot(){
 }
 function restoreSnapshot(){const s=state.snapshots.find(x=>x.id===$('snapshot-select').value);if(!s)return toast('Select a snapshot first.',true);if(!confirm('Replace your current project files with this snapshot?'))return;const idx=state.projects.findIndex(p=>p.id===state.activeProjectId);state.projects[idx]=clone(s.project);renderFiles();saveSoon();toast('Snapshot restored.');}
 function download(name,data,type='application/json'){const blob=data instanceof Blob?data:new Blob([data],{type});const url=URL.createObjectURL(blob);const a=make('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);}
-function projectJSON(){const p=project();return JSON.stringify({format:'mm-platform-b01',active:p.active,files:p.files},null,2);}
-async function importProject(file){if(!file||file.size>10_000_000)return toast('Import file must be under 10 MB.',true);try{let files,active,name=file.name.replace(/\.(zip|json)$/i,'');if(file.name.toLowerCase().endsWith('.zip')){files=await unzipFiles(await file.arrayBuffer());active=files['main.js']?'main.js':Object.keys(files)[0];}else{const payload=JSON.parse(await file.text());if(payload.format==='mm-platform-b01'){files=payload.files;active=payload.active;}else if(payload.files&&payload.active){files=payload.files;active=payload.active;}else throw Error('Not a supported project JSON format');}if(!safeFiles(files)||!Object.hasOwn(files,active))throw Error('Project contains unsafe names, excessive sizes or no valid active file.');if(!confirm(`Import ${Object.keys(files).length} files as a new project?`))return;const p={id:uid('project'),name:name.slice(0,90),active,files,updated:now()};if(state.projects.length>=30)throw Error('Project limit reached');state.projects.push(p);state.activeProjectId=p.id;renderFiles();saveSoon();toast('Imported project files.');}catch(e){toast('Import failed: '+errorText(e),true);}}
-async function importTextFiles(input){const files=Array.from(input.files||[]);input.value='';if(!files.length)return;const p=project();let accepted=0;for(const file of files.slice(0,20)){const name=file.name;if(!safeName(name)||file.size>500000||Object.hasOwn(p.files,name))continue;const text=await file.text();if(Object.keys(p.files).length>=MAX_FILES)break;p.files[name]=text;if(!safeFiles(p.files)){delete p.files[name];break;}p.active=name;accepted++;}renderFiles();saveSoon();toast(`${accepted} text file(s) imported into current project.`);}
+function projectJSON(){const p=project();return JSON.stringify({format:p.binaryAssets&&Object.keys(p.binaryAssets).length?'mm-platform-binary-v1':'mm-platform-b01',active:p.active,files:p.files,...(p.binaryAssets?{binaryAssets:p.binaryAssets}:{})},null,2);}
+async function importProject(file){
+ if(!file||file.size>10_000_000)return toast('Import file must be under 10 MB.',true);
+ try{
+  let files,active,binaryAssets={},name=file.name.replace(/\.(zip|json)$/i,'');
+  if(file.name.toLowerCase().endsWith('.zip')){
+   const unpacked=await unzipFiles(await file.arrayBuffer(),{maxEntries:128,maxBytes:2_500_000,binaryExtensions:Object.keys(BINARY_TYPES)});
+   files={};
+   for(const [filename,value]of Object.entries(unpacked)){
+    if(value instanceof Uint8Array)binaryAssets[filename]=binaryRecord(filename,value);
+    else files[filename]=value;
+   }
+   active=Object.hasOwn(files,'main.js')?'main.js':Object.keys(files)[0];
+  }else{
+   const payload=JSON.parse(await file.text());
+   if(!payload||!payload.files||!payload.active)throw Error('Not a supported project JSON format');
+   files=payload.files;active=payload.active;binaryAssets=payload.binaryAssets||{};
+  }
+  if(!safeFiles(files)||!Object.hasOwn(files,active)||!validateBinaryAssets(binaryAssets,files))throw Error('Project contains unsafe text or binary files, names or sizes.');
+  if(state.projects.length>=30)throw Error('Project limit reached');
+  if(!confirm('Import '+Object.keys(files).length+' text and '+Object.keys(binaryAssets).length+' bounded media files as a new project?'))return;
+  const p={id:uid('project'),name:name.slice(0,90),active,files,binaryAssets,updated:now()};
+  state.projects.push(p);state.activeProjectId=p.id;
+  try{await saveNow();}catch(error){state.projects.pop();state.activeProjectId=state.projects[0].id;throw error;}
+  selectedBinaryName=null;renderFiles();toast('Imported local project with validated media.');
+ }catch(error){toast('Import rejected: '+errorText(error),true);}
+}
+async function importTextFiles(input){const files=Array.from(input.files||[]);input.value='';if(!files.length)return;const p=project();let accepted=0;for(const file of files.slice(0,20)){const name=file.name;if(!safeName(name)||file.size>500000||Object.hasOwn(p.files,name)||Object.hasOwn(p.binaryAssets||{},name))continue;const text=await file.text();if(Object.keys(p.files).length>=MAX_FILES)break;p.files[name]=text;if(!safeFiles(p.files)){delete p.files[name];break;}p.active=name;accepted++;}renderFiles();saveSoon();toast(`${accepted} text file(s) imported into current project.`);}
 const consoleLimit=50000;let terminalLines=0;
 function printConsole(text){const area=$('console-output');if(++terminalLines>180){if(terminalLines===181){run.stop();area.textContent=(area.textContent+'\n[Output flood limit reached; worker terminated.]').slice(0,consoleLimit);}return;}let next=area.textContent+(area.textContent?'\n':'')+String(text);if(next.length>consoleLimit)next=next.slice(0,consoleLimit)+'\n[Output truncated]';area.textContent=next;area.scrollTop=area.scrollHeight;}
 function showExecTab(tab){$('console-pane').hidden=tab!=='console';$('preview-pane').hidden=tab!=='preview';$('show-console').classList.toggle('active',tab==='console');$('show-preview').classList.toggle('active',tab==='preview');}
@@ -368,7 +453,7 @@ async function importAll(file){if(!file||file.size>12_000_000)return toast('Back
 function renderAll(){labs?.refreshSavedDatasets();renderFiles();routeChoices();renderProviders();renderVault();renderChat();renderAudit();renderWorkflows();renderKnowledge();renderStats();renderSettings();renderCapabilities();}
 function commandDialog(){const dialog=$('command-dialog'),input=$('command-search');input.value='';const render=()=>{const host=clearNode($('command-results'));for(const [id,label]of Object.entries(VIEWS)){if(!label.toLowerCase().includes(input.value.toLowerCase()))continue;const b=make('button','',label);b.addEventListener('click',()=>{dialog.close();selectView(id);});host.append(b);}};render();dialog.showModal();input.focus();input.oninput=render;}
 function wire(){$('q04-preview-button').addEventListener('click',q04PreviewEdit);$('q04-accept').addEventListener('click',q04AcceptEdit);$('q04-rollback').addEventListener('click',q04RollbackEdit);qsa('[data-view],[data-goto]').forEach(b=>b.addEventListener('click',()=>selectView(b.dataset.view||b.dataset.goto)));$('mobile-menu').addEventListener('click',()=>{const open=$('sidebar').classList.toggle('open');$('nav-backdrop').hidden=!open;$('mobile-menu').setAttribute('aria-expanded',String(open))});for(const b of [$('nav-backdrop'),$('sidebar-close')])b.addEventListener('click',()=>{$('sidebar').classList.remove('open');$('nav-backdrop').hidden=true;$('mobile-menu').setAttribute('aria-expanded','false');});$('global-command').addEventListener('click',commandDialog);$('command-close').addEventListener('click',()=>$('command-dialog').close());document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();commandDialog()}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();saveNow().then(()=>toast(savedStatus())).catch(()=>{}) }if((e.ctrlKey||e.metaKey)&&e.key==='Enter'&&activeView==='workspace'){e.preventDefault();runCode()}});
-$('project-select').addEventListener('change',e=>{state.activeProjectId=e.target.value;run.stop();renderFiles();saveSoon()});$('new-project').addEventListener('click',createProject);$('rename-project').addEventListener('click',renameProject);$('delete-project').addEventListener('click',deleteProject);$('snapshot-project').addEventListener('click',snapshot);$('snapshot-select').addEventListener('change',renderSnapshotActions);$('snapshot-action-run').addEventListener('click',manageSnapshot);$('restore-snapshot').addEventListener('click',restoreSnapshot);$('add-file').addEventListener('click',newFile);$('rename-file').addEventListener('click',renameFile);$('move-folder').addEventListener('click',moveFolder);$('copy-folder').addEventListener('click',copyFolder);$('delete-file').addEventListener('click',deleteFile);$('add-local-files').addEventListener('change',e=>importTextFiles(e.target));$('code-editor').addEventListener('input',editFile);$('code-editor').addEventListener('scroll',e=>{$('line-gutter').scrollTop=e.target.scrollTop});$('code-editor').addEventListener('keydown',e=>{if(e.key==='Tab'){e.preventDefault();const t=e.target,start=t.selectionStart,end=t.selectionEnd;t.setRangeText('  ',start,end,'end');editFile();}});$('run-code').addEventListener('click',runCode);$('stop-code').addEventListener('click',stopCode);$('preview-page').addEventListener('click',previewPage);$('clear-console').addEventListener('click',()=>{terminalLines=0;$('console-output').textContent='';});$('show-console').addEventListener('click',()=>showExecTab('console'));$('show-preview').addEventListener('click',()=>showExecTab('preview'));$('export-json').addEventListener('click',()=>download(project().name.replace(/\W+/g,'_')+'.json',projectJSON()));$('export-zip').addEventListener('click',()=>download(project().name.replace(/\W+/g,'_')+'.zip',zipFiles(project().files),'application/zip'));$('import-project').addEventListener('change',e=>{const file=e.target.files?.[0];e.target.value='';importProject(file)});
+$('project-select').addEventListener('change',e=>{state.activeProjectId=e.target.value;run.stop();renderFiles();saveSoon()});$('new-project').addEventListener('click',createProject);$('rename-project').addEventListener('click',renameProject);$('delete-project').addEventListener('click',deleteProject);$('snapshot-project').addEventListener('click',snapshot);$('snapshot-select').addEventListener('change',renderSnapshotActions);$('snapshot-action-run').addEventListener('click',manageSnapshot);$('restore-snapshot').addEventListener('click',restoreSnapshot);$('add-file').addEventListener('click',newFile);$('rename-file').addEventListener('click',renameFile);$('move-folder').addEventListener('click',moveFolder);$('copy-folder').addEventListener('click',copyFolder);$('delete-file').addEventListener('click',deleteFile);$('add-local-files').addEventListener('change',e=>importTextFiles(e.target));$('binary-asset-import').addEventListener('change',e=>importBinaryAssets(e.target));$('binary-asset-delete').addEventListener('click',removeBinaryAsset);$('code-editor').addEventListener('input',editFile);$('code-editor').addEventListener('scroll',e=>{$('line-gutter').scrollTop=e.target.scrollTop});$('code-editor').addEventListener('keydown',e=>{if(e.key==='Tab'){e.preventDefault();const t=e.target,start=t.selectionStart,end=t.selectionEnd;t.setRangeText('  ',start,end,'end');editFile();}});$('run-code').addEventListener('click',runCode);$('stop-code').addEventListener('click',stopCode);$('preview-page').addEventListener('click',previewPage);$('clear-console').addEventListener('click',()=>{terminalLines=0;$('console-output').textContent='';});$('show-console').addEventListener('click',()=>showExecTab('console'));$('show-preview').addEventListener('click',()=>showExecTab('preview'));$('export-json').addEventListener('click',()=>download(project().name.replace(/\W+/g,'_')+'.json',projectJSON()));$('export-zip').addEventListener('click',()=>download(project().name.replace(/\W+/g,'_')+'.zip',projectZip(),'application/zip'));$('import-project').addEventListener('change',e=>{const file=e.target.files?.[0];e.target.value='';importProject(file)});
 $('provider-search').addEventListener('input',e=>renderProviders(e.target.value));$('provider-check-local').addEventListener('click',q22InspectRoutes);$('vault-form').addEventListener('submit',submitVault);$('vault-export-encrypted').addEventListener('click',exportEncryptedVaultUI);$('vault-import-encrypted').addEventListener('change',importEncryptedVaultUI);$('vault-rotate-form').addEventListener('submit',rotateVaultUI);$('vault-lock').addEventListener('click',()=>{vault.lock();renderAll();toast('Key vault locked.');});$('vault-wipe').addEventListener('click',async()=>{if(!confirm('Permanently erase ALL encrypted API keys from this device?'))return;if(!confirm('Confirm permanent vault deletion. This cannot be undone.'))return;await vault.erase();renderAll();toast('Encrypted vault erased.');});$('key-provider').addEventListener('change',e=>{$('key-model').value=vault.get(e.target.value)?.model||providerById(e.target.value)?.model||'';$('key-account').value=vault.get(e.target.value)?.account||'';});$('save-key').addEventListener('click',()=>{if(!vault.isUnlocked){toast('First create or unlock your vault with a passphrase. Your provider fields will remain filled.',true);$('vault-password').focus();$('vault-password').scrollIntoView({behavior:'smooth',block:'center'});}});$('key-form').addEventListener('submit',submitKey);
 $('chat-route').addEventListener('change',renderCompareRoute);$('compare-mode').addEventListener('change',renderCompareRoute);$('chat-output-tokens').addEventListener('change',e=>{state.preferences.maxOutputTokens=Number(e.target.value);saveSoon();toast('Request output cap saved locally. Provider eligibility and free balance remain unverified.');});$('chat-form').addEventListener('submit',sendMessage);$('chat-retry-draft').addEventListener('click',q22DraftManualRetry);$('chat-input').addEventListener('input',e=>$('chat-counter').textContent=e.target.value.length+' / 10,000');$('stop-chat').addEventListener('click',stopChat);$('send-selected-code').addEventListener('click',addCodeToChat);$('new-chat').addEventListener('click',newThread);$('clear-chat').addEventListener('click',clearThread);$('thread-search').addEventListener('input',renderThreadList);$('export-chat-thread').addEventListener('click',exportThread);$('delete-chat-thread').addEventListener('click',deleteThread);$('export-audit').addEventListener('click',()=>download('mm-audit.json',JSON.stringify(state.audit,null,2)));$('clear-audit').addEventListener('click',()=>{if(!confirm('Clear local audit log?'))return;state.audit=[];saveSoon();renderAudit();});
 $('workflow-template').addEventListener('change',()=>{$('workflow-stages').value=FLOW_TEMPLATES[$('workflow-template').value].join('\n');renderFlowGraph();});$('workflow-stages').addEventListener('input',()=>renderFlowGraph());$('workflow-form').addEventListener('submit',executeWorkflow);$('workflow-resume').addEventListener('click',resumeWorkflow);$('workflow-stop').addEventListener('click',()=>{workflowController?.abort();toast('Workflow cancellation requested.');});$('capability-refresh').addEventListener('click',refreshLocalCapabilities);$('knowledge-form').addEventListener('submit',submitKnowledge);$('knowledge-edit').addEventListener('click',beginNoteEdit);$('knowledge-cancel-edit').addEventListener('click',()=>{cancelNoteEdit();toast('Note edit cancelled without changes.');});$('knowledge-find-duplicates').addEventListener('click',showDuplicateNotes);$('knowledge-search').addEventListener('input',()=>{currentKnowledgePage=0;renderKnowledge();});$('knowledge-page-prev').addEventListener('click',()=>{currentKnowledgePage=Math.max(0,currentKnowledgePage-1);renderKnowledge();});$('knowledge-page-next').addEventListener('click',()=>{currentKnowledgePage++;renderKnowledge();});$('knowledge-import').addEventListener('change',e=>importKnowledge(e.target));$('knowledge-evidence').addEventListener('click',previewLocalEvidence);$('knowledge-insert-evidence').addEventListener('click',insertLocalEvidence);$('knowledge-export').addEventListener('click',()=>download('mm-knowledge.json',exportNoteArchive(state.notes)));$('knowledge-delete').addEventListener('click',()=>{if(!activeNote||activeNote.type!=='note')return toast('Select a saved note to delete.',true);if(!confirm(`Delete note ${activeNote.title}?`))return;state.notes=state.notes.filter(n=>n.id!==activeNote.id);if(editingNoteId===activeNote.id)cancelNoteEdit();activeNote=null;$('knowledge-preview').textContent='Choose a search result.';renderKnowledge();saveSoon();});$('knowledge-to-chat').addEventListener('click',()=>{activeNote=resolveActiveKnowledge();if(!activeNote)return toast('Select a current note or project file first.',true);$('chat-input').value=`Use the following local reference (${activeNote.title}):\n${activeNote.content.slice(0,9000)}`;$('chat-counter').textContent=$('chat-input').value.length+' / 10,000';selectView('chat');});
