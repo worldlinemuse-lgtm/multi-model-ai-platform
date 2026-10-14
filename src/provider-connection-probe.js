@@ -16,12 +16,13 @@ export function classifyProviderStatus(status){
   if(status>=500)return {state:'provider-unavailable',message:'Groq returned a server-side error. No automatic retry was made.'};
   return {state:'request-rejected',message:'The provider rejected this metadata request.'};
 }
+const FREE_PLAN_RETIRED=new Set(['llama-3.1-8b-instant','llama-3.3-70b-versatile']); // Groq free/developer shutoff 2026-08-16
 export function recommendGroqModel(models,selected){
   if(!Array.isArray(models)||!models.length)return {model:null,reason:'No active models were returned. Do not guess or auto-switch.'};
   const choices=models.filter(id=>typeof id==='string'&&MODEL_ID.test(id));
-  if(choices.includes(selected))return {model:selected,reason:'The saved model was returned as active; account free-tier eligibility is still unverified.'};
-  for(const preferred of ['llama-3.1-8b-instant','openai/gpt-oss-20b']){
-    if(choices.includes(preferred))return {model:preferred,reason:'Suggested active text model only; verify free-plan eligibility before saving or making inference requests.'};
+  if(choices.includes(selected)&&!FREE_PLAN_RETIRED.has(selected))return {model:selected,reason:'The saved model is active; account free-tier eligibility is still unverified.'};
+  for(const preferred of ['openai/gpt-oss-20b','openai/gpt-oss-120b']){
+    if(choices.includes(preferred))return {model:preferred,reason:FREE_PLAN_RETIRED.has(selected)?'Saved Llama model was retired for the free/developer tier in August 2026. Suggested replacement appears active; verify exact account eligibility before saving.':'Suggested active text model only; verify free-plan eligibility before saving or making inference requests.'};
   }
   return {model:null,reason:'Available models need human review for chat capability and free-plan eligibility.'};
 }
