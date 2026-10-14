@@ -1,0 +1,9 @@
+# Q28 — safe GitHub proposal export, not browser GitHub sync
+
+The browser edition must not directly embed the ChatGPT-connected GitHub identity or ask the user to paste permanent personal access tokens into a public static site. Q28 begins with a human-approved, text-only source proposal downloaded to the user's device. The operator types owner/repo and optionally a **claimed** 40-character base commit, then explicitly clicks Export. There are no HTTP requests and no GitHub writes; the JSON marks remoteStateVerified/writePerformed/approvalGranted false, includes plaintext source, and states current remote SHA, branch protection, merge conflicts and permissions must all be verified by a separately authorized mechanism before any future write.
+
+This avoids false GitHub sync claims, token exfiltration from a static origin, accidental writes to Muse's other repositories, and stale-head overwrite. File safety uses existing app relative-name validator and a 100k-character per-file cap. No credentials are exported. User must review source for any secrets before downloading a plaintext proposal. Historical code and branch protections remain unchanged.
+
+Primary references: GitHub REST contents create/update file https://docs.github.com/en/rest/repos/contents#create-or-update-file-contents ; GitHub permissions and tokens https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github ; GitHub branch protection rules https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches . No upstream code copied.
+
+Tests: path/repo/SHA rejection, no false write/remote/approval state, payload exactness, explicit browser confirmation and download. Full Q28 bidirectional sync UI is not shipped; needs separately authorized GitHub App/OAuth and review-approved branch write with remote conflict checks.
