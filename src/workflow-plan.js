@@ -13,7 +13,7 @@ const okWhen=value=>value==='always'||(typeof value==='string'&&/^(contains|not-
 function validStage(stage){
  return !!stage&&typeof stage==='object'&&!Array.isArray(stage)
  &&okLabel(stage.label)&&typeof stage.route==='string'&&ROUTE.test(stage.route)
- &&okWhen(stage.when)&&NAME.test(stage.save)&& (stage.input==='previous'||NAME.test(stage.input));
+ &&okWhen(stage.when)&&typeof stage.save==='string'&&NAME.test(stage.save)&&typeof stage.input==='string'&&(stage.input==='previous'||NAME.test(stage.input));
 }
 export function validateSavedWorkflowPlan(plan){
  if(!Array.isArray(plan)||plan.length<2||plan.length>MAX_STAGES)return false;
