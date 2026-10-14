@@ -31,6 +31,12 @@ def main():
             checkpoint('open application')
             page.goto(args.base_url,wait_until='domcontentloaded',timeout=25000)
             expect(page.locator('#view-overview h1')).to_be_visible(timeout=15000)
+            checkpoint('verify full startup completed without caught exceptions')
+            page.wait_for_function("['ready','failed','degraded'].includes(document.documentElement.dataset.mmBoot)",timeout=15000)
+            boot_status=page.evaluate('document.documentElement.dataset.mmBoot')
+            assert boot_status=='ready',f'Application startup not ready: {boot_status}; toast={page.locator("#toast").inner_text()}'
+            assert 'Initialization error' not in page.locator('#toast').inner_text()
+
             checkpoint('verify home page hero')
             expect(page.get_by_text('Build with a whole',exact=False)).to_have_count(1,timeout=10000)
             checkpoint('open code studio')

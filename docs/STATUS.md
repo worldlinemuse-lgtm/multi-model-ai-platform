@@ -68,3 +68,17 @@ The repo has a Pages deployment workflow and a standalone static root. GitHub Pa
 ## B0.3.3 audited defect-remediation batch (2026-10-12)
 
 See `docs/B0_3_3_REPAIRS.md` and original Library `B0_3_2_FUNCTIONAL_COMPLETENESS_AUDIT_2026_10_11.md`. Source-level fixes have been implemented and extended with browser regressions. The new release is **not verified as deployed until the three CI jobs (checks, deploy, hosted-acceptance) pass**. No provider secrets, live provider tests or background agents were introduced.
+
+
+## Current acceptance ledger — 2026-10-14
+
+The older B0.3.x sections above are **historical**. Latest independently confirmed live main before the B0.4.0 reliability PR: `078672e7b35a3f34a8f8bde05885804fec1a92ab`; run `38510367623` passed `checks`, `deploy`, and `hosted-acceptance` (45 exact hosted SHA-256 assets, 19/19 main UI scenarios, 28/28 broad QA cases).
+
+- Q01–Q27: deployed **at limited documented scope**; see detailed ADRs for each feature. Actual local LLM inference, authenticated remote collaboration, real API provider account acceptance and precise account free quota are not implemented or accepted.
+- Q28: PR #38 is separate, open, green branch checks, **not deployed**; its feature exports a human-review-only offline GitHub proposal and does not write to GitHub.
+- Q29–Q33: staged local candidates and architectural documentation, **not deployed**, with no green hosted PR for those candidates yet.
+- Critical new finding: a reviewer reported startup `Cannot set properties of null (setting 'hidden')` despite prior green tests. This branch adds explicit boot readiness/degradation signals and browser negative regression; the precise live cause remains unconfirmed.
+- Cloudflare provider adapter previously discarded `system` instructions. The reliability branch preserves them, with offline synthetic tests and no live credentials.
+- GitHub Actions uses Node24-compatible upstream v7 actions and runs application checks under Node24 in the reliability branch; changes require PR CI and a separate post-merge production run.
+
+**Do not promote this branch to 'deployed' on green branch checks alone.** Reconcile current SHA, merge permissions and post-merge Pages acceptance independently.

@@ -29,3 +29,17 @@ test('P28 respects caller cancellation',async()=>{
   await assert.rejects(pending,e=>e.name==='AbortError');
  }finally{globalThis.fetch=original;}
 });
+
+
+test('Cloudflare Workers AI preserves system instructions and message order',()=>{
+ const cfg={...key,model:'@cf/meta/llama-3.1-8b-instruct-fp8',account:'0'.repeat(32)};
+ const messages=[{role:'system',content:'Mandatory safety and workflow instructions'},{role:'user',content:'First query'},{role:'assistant',content:'Prior answer'},{role:'user',content:'Second query'}];
+ const req=buildRequest('cloudflare',cfg,messages,{maxOutputTokens:256});
+ assert.deepEqual(req.body.messages,messages);
+ assert.equal(req.body.max_tokens,256);
+ assert.equal(req.url,'https://api.cloudflare.com/client/v4/accounts/'+cfg.account+'/ai/run/'+cfg.model);
+});
+test('Cloudflare does not silently strip a system-only request',()=>{
+ const req=buildRequest('cloudflare',{...key,model:'@cf/meta/llama-3.1-8b-instruct-fp8'},[{role:'system',content:'System constraints'}]);
+ assert.deepEqual(req.body.messages,[{role:'system',content:'System constraints'}]);
+});
