@@ -6,6 +6,8 @@ import {traceDuration,auditTraceFields} from './request-trace.js';
 import {RuntimeRunner,previewReport} from './sandbox.js';
 import {zipFiles,unzipFiles} from './zip.js';
 import {setupLabs} from './labs.js';
+import {compileWorkflowPlan,validateSavedWorkflowPlan} from './workflow-plan.js';
+import {executeSavedPlan} from './workflow-supervisor.js';
 import {setupWasmImport} from './wasm-ui.js';
 import {setupExpressionRepl} from './expression-repl-ui.js';
 import {projectFolders,projectTreeEntries,moveProjectFolder,copyProjectFolder} from './project-files.js';
@@ -160,9 +162,87 @@ function addCodeToChat(){const p=project();const content=p.files[p.active];$('ch
 
 function renderAudit(){const events=state.audit;const reqs=events.filter(x=>x.op==='inference');$('usage-total').textContent=reqs.length;$('usage-success').textContent=reqs.filter(x=>x.status==='success').length;const observed=reqs.filter(x=>Number.isSafeInteger(x.usage?.total_tokens));$('usage-tokens').textContent=observed.length?`${observed.reduce((s,x)=>s+x.usage.total_tokens,0)} observed / ${reqs.length} attempts`:'UNKNOWN';const body=clearNode($('audit-rows'));for(const a of events.slice(0,100)){const tr=make('tr');for(const value of [formatTime(a.at),`${a.provider||'local'} / ${a.op}`,a.status,a.requestId?.slice(0,8)||'—',a.model||'—',a.latencyMs==null?'unknown':a.latencyMs+' ms',a.usage?`${a.usage.total_tokens===null?'unknown':a.usage.total_tokens} tokens · ${a.usage.source}`:'unknown'])tr.append(make('td',value==='failed'?'bad':'',value));body.append(tr);}if(!events.length){const tr=make('tr'),td=make('td','','No activity recorded.');td.colSpan=7;tr.append(td);body.append(tr);}}
 function flowStages(){const entered=$('workflow-stages').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);return entered.length?entered:FLOW_TEMPLATES[$('workflow-template').value]||FLOW_TEMPLATES.research;}
-function renderFlowGraph(states=[]){const steps=flowStages(),host=clearNode($('workflow-graph'));if(steps.length>6){host.textContent=`${steps.length} stages entered. Maximum is 6; remove extras before starting.`;return;}steps.forEach((step,i)=>{const cell=make('div','flow-step '+(states[i]||'pending'),`${i+1}. ${step}`);cell.append(make('span','',({pending:'Waiting',running:'Running',done:'Complete',error:'Failed'})[states[i]]||''));host.append(cell);if(i!==steps.length-1)host.append(make('span','flow-arrow','→'));});}
-function renderWorkflows(){routeChoices();renderFlowGraph();const host=clearNode($('workflow-history'));for(const w of state.workflows.slice(0,30)){const b=make('button','history-entry');b.append(make('strong','',`${w.template} · ${w.status}`),make('small','',`${formatTime(w.at)} · ${w.goal.slice(0,65)}`));b.addEventListener('click',()=>{$('workflow-results').textContent=w.steps.map(s=>`${s.stage}\n${s.content}`).join('\n\n---\n\n')});host.append(b);}if(!state.workflows.length)host.textContent='No runs recorded.';}
-async function executeWorkflow(event){event.preventDefault();if(workflowController)return toast('Stop the current workflow first.',true);const id=$('workflow-route').value,cred=vault.get(id),goal=$('workflow-goal').value.trim(),template=$('workflow-template').value;if(!cred)return toast('Unlock a saved model key first.',true);if(!goal)return;const stages=flowStages();if(stages.length<2||stages.length>6)return toast('Choose between 2 and 6 workflow stages.',true);const controller=new AbortController();workflowController=controller;$('workflow-stop').disabled=false;$('workflow-start').disabled=true;$('workflow-results').textContent='Starting supervised workflow…';const result={id:uid('workflow'),at:now(),provider:id,template,goal,status:'running',steps:[]};let previous='';const status=stages.map(()=> 'pending');for(let i=0;i<stages.length;i++){if(controller.signal.aborted)break;status[i]='running';renderFlowGraph(status);const instruction=i===0?`Task: ${goal}\nStage 1 (${stages[i]}): ${stages[i]==='Plan implementation'?'Create a concrete implementation plan.': 'Produce a structured response.'}`:i===1?`Original task: ${goal}\nPrior stage output: ${previous.slice(0,7500)}\nStage 2 (${stages[i]}): improve or extend this work.`:`Original task: ${goal}\nPrior stage output: ${previous.slice(0,7500)}\nStage ${i+1} (${stages[i]}): carry out this named stage, using the prior output as input; clearly describe the result.`;audit('inference',id,'requested');try{const answer=await callProvider(id,cred,[{role:'user',content:instruction}],{signal:controller.signal});previous=answer.text;result.steps.push({stage:stages[i],content:answer.text,model:answer.model});status[i]='done';audit('inference',id,'success',answer.usage);$('workflow-results').textContent=result.steps.map(s=>`${s.stage} (${s.model})\n${s.content}`).join('\n\n---\n\n');}catch(e){status[i]='error';result.steps.push({stage:stages[i],content:e.name==='AbortError'?'Stopped by user':errorText(e)});result.status=e.name==='AbortError'?'stopped':'failed';audit('inference',id,result.status);break;}}if(result.status==='running')result.status=controller.signal.aborted?'stopped':result.steps.length===stages.length?'complete':'failed';renderFlowGraph(status);state.workflows.unshift(result);state.workflows=state.workflows.slice(0,40);$('workflow-results').textContent=result.steps.map(s=>`${s.stage}${s.model?' ('+s.model+')':''}\n${s.content}`).join('\n\n---\n\n');workflowController=null;$('workflow-stop').disabled=true;$('workflow-start').disabled=false;saveSoon();renderWorkflows();}
+function renderFlowGraph(states=[],givenPlan=null){
+ const stages=givenPlan||flowStages(),host=clearNode($('workflow-graph'));
+ if(stages.length>6){host.textContent=stages.length+' stages entered. Maximum is 6; remove extras before starting.';return;}
+ stages.forEach((stage,i)=>{
+  const caption=typeof stage==='string'?stage:stage.label+' ['+stage.route+']';
+  const tile=make('div','flow-step '+(states[i]||'pending'),(i+1)+'. '+caption);
+  tile.append(make('span','',({pending:'Waiting',running:'Running',done:'Complete',skipped:'Skipped',error:'Failed'})[states[i]]||''));
+  host.append(tile);if(i!==stages.length-1)host.append(make('span','flow-arrow','→'));
+ });
+ if(!givenPlan){
+  try{
+   const plan=compileWorkflowPlan($('workflow-stages').value||FLOW_TEMPLATES[$('workflow-template').value].join('\n'),$('workflow-route').value,vault.list().map(x=>x.id));
+   $('workflow-estimate').textContent='Validated '+plan.length+' stages, at most '+plan.length+' authorized model calls: '+plan.map(x=>x.route).join(' → ')+'. Conditions may skip a call.';
+  }catch(e){$('workflow-estimate').textContent='Plan check: '+errorText(e);}
+ }
+}
+function workflowText(w){return w.steps.map(s=>s.stage+(s.model?' ('+s.model+')':'')+(s.provider?' ['+s.provider+']':'')+'\n'+s.content).join('\n\n---\n\n');}
+function renderWorkflows(){
+ routeChoices();renderFlowGraph();
+ const host=clearNode($('workflow-history'));
+ for(const w of state.workflows.slice(0,30)){
+  const b=make('button','history-entry');b.type='button';
+  b.append(make('strong','',w.template+' · '+w.status),make('small','',formatTime(w.at)+' · '+w.goal.slice(0,65)));
+  b.addEventListener('click',()=>{$('workflow-results').textContent=workflowText(w)||'No finished stage output yet.';});host.append(b);
+ }
+ if(!state.workflows.length)host.textContent='No runs recorded.';
+ $('workflow-resume').disabled=!!workflowController||!state.workflows.some(w=>Array.isArray(w.plan)&&w.steps.length<w.plan.length&&['running','stopped'].includes(w.status));
+}
+async function runWorkflowCheckpoint(result){
+ if(workflowController)return toast('Stop the active workflow first.',true);
+ if(!validateSavedWorkflowPlan(result.plan))return toast('Stored plan validation failed.',true);
+ const controller=new AbortController();workflowController=controller;
+ $('workflow-start').disabled=true;$('workflow-stop').disabled=false;$('workflow-resume').disabled=true;
+ const progress=()=>result.plan.map((_,i)=>result.steps[i]?(result.steps[i].status==='skipped'?'skipped':result.steps[i].status==='failed'?'error':'done'):'pending');
+ try{
+  await executeSavedPlan(result,{
+   signal:controller.signal,
+   persist:async()=>await saveNow(),
+   onStage:(run,i,status)=>{
+    const states=progress();states[i]=status;renderFlowGraph(states,run.plan);
+    $('workflow-results').textContent=workflowText(run)||'Running authorized stages…';
+   },
+   callStage:async(stage,prompt,signal)=>{
+    const cred=vault.get(stage.route);
+    if(!cred)throw Error('Route '+stage.route+' requires an unlocked key.');
+    audit('inference',stage.route,'requested');
+    try{
+     const answer=await callProvider(stage.route,cred,[{role:'user',content:prompt}],{signal});
+     audit('inference',stage.route,'success',answer.usage);return answer;
+    }catch(e){audit('inference',stage.route,signal.aborted?'stopped':'failed');throw e;}
+   }
+  });
+ }catch(error){result.status='stopped';toast('Workflow paused safely: '+errorText(error),true);}
+ finally{
+  workflowController=null;$('workflow-start').disabled=false;$('workflow-stop').disabled=true;
+  $('workflow-results').textContent=workflowText(result)||'Workflow '+result.status+'.';renderWorkflows();
+ }
+}
+async function executeWorkflow(event){
+ event.preventDefault();
+ if(workflowController)return toast('Stop the current workflow first.',true);
+ if(!$('workflow-confirm').checked)return toast('Confirm explicit model requests first.',true);
+ const goal=$('workflow-goal').value.trim(),template=$('workflow-template').value,provider=$('workflow-route').value;
+ if(!goal)return toast('Enter a task goal.',true);
+ let plan;
+ try{plan=compileWorkflowPlan($('workflow-stages').value||FLOW_TEMPLATES[template].join('\n'),provider,vault.list().map(x=>x.id));}
+ catch(e){return toast(errorText(e),true);}
+ const result={id:uid('workflow'),at:now(),provider,template,goal,status:'running',steps:[],plan,inFlightStage:null};
+ state.workflows.unshift(result);state.workflows=state.workflows.slice(0,40);
+ try{await saveNow();}catch(e){state.workflows=state.workflows.filter(x=>x!==result);return toast('No request sent: '+errorText(e),true);}
+ await runWorkflowCheckpoint(result);
+}
+async function resumeWorkflow(){
+ if(workflowController)return;
+ const result=state.workflows.find(w=>Array.isArray(w.plan)&&w.steps.length<w.plan.length&&['running','stopped'].includes(w.status));
+ if(!result)return toast('No paused workflow to resume.',true);
+ if(!validateSavedWorkflowPlan(result.plan))return toast('Saved plan integrity check failed.',true);
+ if(result.plan.slice(result.steps.length).some(s=>!vault.get(s.route)))return toast('Unlock the required saved model routes before resuming.',true);
+ if(!confirm('Resume '+(result.plan.length-result.steps.length)+' remaining stage(s)? An interrupted request may already have consumed quota and may be reissued. Resume is manual only; no paid fallback.'))return;
+ await runWorkflowCheckpoint(result);
+}
 
 function knowledgeItems(query){const results=[];for(const note of state.notes){if((note.title+' '+note.content).toLowerCase().includes(query)){results.push({type:'note',id:note.id,title:note.title,content:note.content});}}for(const p of state.projects){for(const [name,source]of Object.entries(p.files)){if((p.name+' '+name+' '+source).toLowerCase().includes(query))results.push({type:'file',id:name,projectId:p.id,title:p.name+' / '+name,content:source});}}return results.slice(0,70);}
 function resolveActiveKnowledge(){
@@ -217,7 +297,7 @@ function wire(){$('q04-preview-button').addEventListener('click',q04PreviewEdit)
 $('project-select').addEventListener('change',e=>{state.activeProjectId=e.target.value;run.stop();renderFiles();saveSoon()});$('new-project').addEventListener('click',createProject);$('rename-project').addEventListener('click',renameProject);$('delete-project').addEventListener('click',deleteProject);$('snapshot-project').addEventListener('click',snapshot);$('snapshot-select').addEventListener('change',renderSnapshotActions);$('snapshot-action-run').addEventListener('click',manageSnapshot);$('restore-snapshot').addEventListener('click',restoreSnapshot);$('add-file').addEventListener('click',newFile);$('rename-file').addEventListener('click',renameFile);$('move-folder').addEventListener('click',moveFolder);$('copy-folder').addEventListener('click',copyFolder);$('delete-file').addEventListener('click',deleteFile);$('add-local-files').addEventListener('change',e=>importTextFiles(e.target));$('code-editor').addEventListener('input',editFile);$('code-editor').addEventListener('scroll',e=>{$('line-gutter').scrollTop=e.target.scrollTop});$('code-editor').addEventListener('keydown',e=>{if(e.key==='Tab'){e.preventDefault();const t=e.target,start=t.selectionStart,end=t.selectionEnd;t.setRangeText('  ',start,end,'end');editFile();}});$('run-code').addEventListener('click',runCode);$('stop-code').addEventListener('click',stopCode);$('preview-page').addEventListener('click',previewPage);$('clear-console').addEventListener('click',()=>{terminalLines=0;$('console-output').textContent='';});$('show-console').addEventListener('click',()=>showExecTab('console'));$('show-preview').addEventListener('click',()=>showExecTab('preview'));$('export-json').addEventListener('click',()=>download(project().name.replace(/\W+/g,'_')+'.json',projectJSON()));$('export-zip').addEventListener('click',()=>download(project().name.replace(/\W+/g,'_')+'.zip',zipFiles(project().files),'application/zip'));$('import-project').addEventListener('change',e=>{const file=e.target.files?.[0];e.target.value='';importProject(file)});
 $('provider-search').addEventListener('input',e=>renderProviders(e.target.value));$('vault-form').addEventListener('submit',submitVault);$('vault-lock').addEventListener('click',()=>{vault.lock();renderAll();toast('Key vault locked.');});$('vault-wipe').addEventListener('click',async()=>{if(!confirm('Permanently erase ALL encrypted API keys from this device?'))return;if(!confirm('Confirm permanent vault deletion. This cannot be undone.'))return;await vault.erase();renderAll();toast('Encrypted vault erased.');});$('key-provider').addEventListener('change',e=>{$('key-model').value=vault.get(e.target.value)?.model||providerById(e.target.value)?.model||'';$('key-account').value=vault.get(e.target.value)?.account||'';});$('save-key').addEventListener('click',()=>{if(!vault.isUnlocked){toast('First create or unlock your vault with a passphrase. Your provider fields will remain filled.',true);$('vault-password').focus();$('vault-password').scrollIntoView({behavior:'smooth',block:'center'});}});$('key-form').addEventListener('submit',submitKey);
 $('chat-route').addEventListener('change',renderCompareRoute);$('compare-mode').addEventListener('change',renderCompareRoute);$('chat-form').addEventListener('submit',sendMessage);$('chat-input').addEventListener('input',e=>$('chat-counter').textContent=e.target.value.length+' / 10,000');$('stop-chat').addEventListener('click',stopChat);$('send-selected-code').addEventListener('click',addCodeToChat);$('new-chat').addEventListener('click',newThread);$('clear-chat').addEventListener('click',clearThread);$('thread-search').addEventListener('input',renderThreadList);$('export-chat-thread').addEventListener('click',exportThread);$('delete-chat-thread').addEventListener('click',deleteThread);$('export-audit').addEventListener('click',()=>download('mm-audit.json',JSON.stringify(state.audit,null,2)));$('clear-audit').addEventListener('click',()=>{if(!confirm('Clear local audit log?'))return;state.audit=[];saveSoon();renderAudit();});
-$('workflow-template').addEventListener('change',()=>{$('workflow-stages').value=FLOW_TEMPLATES[$('workflow-template').value].join('\n');renderFlowGraph();});$('workflow-stages').addEventListener('input',()=>renderFlowGraph());$('workflow-form').addEventListener('submit',executeWorkflow);$('workflow-stop').addEventListener('click',()=>{workflowController?.abort();toast('Workflow cancellation requested.');});$('capability-refresh').addEventListener('click',refreshLocalCapabilities);$('knowledge-form').addEventListener('submit',submitKnowledge);$('knowledge-edit').addEventListener('click',beginNoteEdit);$('knowledge-cancel-edit').addEventListener('click',()=>{cancelNoteEdit();toast('Note edit cancelled without changes.');});$('knowledge-find-duplicates').addEventListener('click',showDuplicateNotes);$('knowledge-search').addEventListener('input',renderKnowledge);$('knowledge-import').addEventListener('change',e=>importKnowledge(e.target));$('knowledge-export').addEventListener('click',()=>download('mm-knowledge.json',exportNoteArchive(state.notes)));$('knowledge-delete').addEventListener('click',()=>{if(!activeNote||activeNote.type!=='note')return toast('Select a saved note to delete.',true);if(!confirm(`Delete note ${activeNote.title}?`))return;state.notes=state.notes.filter(n=>n.id!==activeNote.id);if(editingNoteId===activeNote.id)cancelNoteEdit();activeNote=null;$('knowledge-preview').textContent='Choose a search result.';renderKnowledge();saveSoon();});$('knowledge-to-chat').addEventListener('click',()=>{activeNote=resolveActiveKnowledge();if(!activeNote)return toast('Select a current note or project file first.',true);$('chat-input').value=`Use the following local reference (${activeNote.title}):\n${activeNote.content.slice(0,9000)}`;$('chat-counter').textContent=$('chat-input').value.length+' / 10,000';selectView('chat');});
+$('workflow-template').addEventListener('change',()=>{$('workflow-stages').value=FLOW_TEMPLATES[$('workflow-template').value].join('\n');renderFlowGraph();});$('workflow-stages').addEventListener('input',()=>renderFlowGraph());$('workflow-form').addEventListener('submit',executeWorkflow);$('workflow-resume').addEventListener('click',resumeWorkflow);$('workflow-stop').addEventListener('click',()=>{workflowController?.abort();toast('Workflow cancellation requested.');});$('capability-refresh').addEventListener('click',refreshLocalCapabilities);$('knowledge-form').addEventListener('submit',submitKnowledge);$('knowledge-edit').addEventListener('click',beginNoteEdit);$('knowledge-cancel-edit').addEventListener('click',()=>{cancelNoteEdit();toast('Note edit cancelled without changes.');});$('knowledge-find-duplicates').addEventListener('click',showDuplicateNotes);$('knowledge-search').addEventListener('input',renderKnowledge);$('knowledge-import').addEventListener('change',e=>importKnowledge(e.target));$('knowledge-export').addEventListener('click',()=>download('mm-knowledge.json',exportNoteArchive(state.notes)));$('knowledge-delete').addEventListener('click',()=>{if(!activeNote||activeNote.type!=='note')return toast('Select a saved note to delete.',true);if(!confirm(`Delete note ${activeNote.title}?`))return;state.notes=state.notes.filter(n=>n.id!==activeNote.id);if(editingNoteId===activeNote.id)cancelNoteEdit();activeNote=null;$('knowledge-preview').textContent='Choose a search result.';renderKnowledge();saveSoon();});$('knowledge-to-chat').addEventListener('click',()=>{activeNote=resolveActiveKnowledge();if(!activeNote)return toast('Select a current note or project file first.',true);$('chat-input').value=`Use the following local reference (${activeNote.title}):\n${activeNote.content.slice(0,9000)}`;$('chat-counter').textContent=$('chat-input').value.length+' / 10,000';selectView('chat');});
 $('accent-select').addEventListener('change',e=>{state.preferences.accent=e.target.value;document.body.dataset.accent=e.target.value;saveSoon()});$('compact-toggle').addEventListener('change',e=>{state.preferences.compact=e.target.checked;document.body.classList.toggle('compact',e.target.checked);saveSoon()});$('backup-all').addEventListener('click',exportAll);$('restore-all').addEventListener('change',e=>{const file=e.target.files?.[0];e.target.value='';importAll(file)});$('reset-all').addEventListener('click',async()=>{if(!confirm('Reset projects, notes, chat and audit? API keys remain encrypted in the separate vault.'))return;if(!confirm('This removes the saved workspace from this browser. Confirm?'))return;try{await replaceWorkspace(freshState());toast('Application data reset and saved.');}catch(e){toast('Reset was not applied: '+errorText(e),true);}});$('recovery-backup').addEventListener('click',()=>{if(recoveryRaw!==null)download('mm-unreadable-'+(recoveryKind||'state')+'-backup.txt',recoveryRaw,'text/plain');});$('recovery-reset').addEventListener('click',async()=>{if(recoveryRaw===null)return;if(!confirm('Reset this unreadable saved record? Download its raw backup first.'))return;try{await replaceWorkspace(freshState());if(recoveryKind==='legacy')localStorage.removeItem('mm-platform-browser-b01');recoveryRaw=null;recoveryKind=null;renderSettings();toast('Unreadable saved data replaced and saved; new workspace initialized.');}catch(e){toast('Reset failed: '+errorText(e),true);}});$('cache-refresh').addEventListener('click',async()=>{
  const controller=navigator.serviceWorker?.controller;
  if(!controller)return toast('Open the site over HTTPS and reload to initialize service worker.',true);
