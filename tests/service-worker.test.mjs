@@ -48,3 +48,13 @@ test('P31: activation removes this app obsolete cache but preserves other sites'
  await h.activate();
  assert.deepEqual(h.deleted,['mm-studio-shell-b03-3','mm-studio-shell-b03-4','mm-studio-shell-b03-5','mm-studio-shell-b03-6','mm-studio-shell-b03-7','mm-studio-shell-b03-8','mm-studio-shell-b03-9','mm-studio-shell-b03-10']);
 });
+
+test('Q03: offline shell includes every direct static module import from main',()=>{
+  const main=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
+  const shellMatch=source.match(/const SHELL=\[([^\]]+)\];/);
+  assert.ok(shellMatch,'service worker must declare a shell asset list');
+  const shell=new Set([...shellMatch[1].matchAll(/['"]([^'"]+)['"]/g)].map(match=>match[1]));
+  const dependencies=[...main.matchAll(/\bfrom\s+['"]\.\/([^'"]+)['"]/g)].map(match=>'./src/'+match[1]);
+  assert.ok(dependencies.includes('./src/labs.js'),'Labs is a required static module');
+  for(const asset of dependencies)assert.ok(shell.has(asset),'Offline shell is missing '+asset);
+});
