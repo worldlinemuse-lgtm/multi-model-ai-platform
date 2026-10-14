@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createWorkshopMetrics,WORKSHOP_OPERATIONS} from '../src/workshop-metrics.js';
+import {createWorkshopMetrics,WORKSHOP_OPERATIONS} from '../src/request-trace.js';
 
 test('duration success, error, timeouts, stop and rolling percentiles',()=>{
  let time=0;const m=createWorkshopMetrics({clock:()=>time});
