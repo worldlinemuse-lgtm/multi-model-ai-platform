@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {probeGroqModels,recommendGroqModel,classifyProviderStatus} from '../src/provider-connection-probe.js';
 
-const credential={key:'SYNTHETIC_TEST_KEY_NOT_REAL',model:'llama-3.3-70b-versatile',attested:true};
-const ok=({data=[{id:'llama-3.1-8b-instant',active:true},{id:'old-inactive',active:false}]}={})=>({ok:true,status:200,headers:{get:()=>null},text:async()=>JSON.stringify({data})});
+const credential={key:'SYNTHETIC_TEST_KEY_NOT_REAL',model:'openai/gpt-oss-20b',attested:true};
+const ok=({data=[{id:'openai/gpt-oss-20b',active:true},{id:'old-inactive',active:false}]}={})=>({ok:true,status:200,headers:{get:()=>null},text:async()=>JSON.stringify({data})});
 test('Groq metadata probe is opt-in and missing key cannot contact provider',async()=>{
  let calls=0;const r=await probeGroqModels({fetchImpl:()=>{calls++;throw Error('should not call');}});
  assert.equal(calls,0);assert.equal(r.networkAttempted,false);assert.equal(r.state,'missing-credential');
@@ -16,7 +16,7 @@ test('Groq metadata GET uses no inference or retries, explicit CORS and omits co
   assert.equal(opts.headers.Authorization,'Bearer '+credential.key);return ok();
  }});
  assert.equal(calls,1);assert.equal(r.state,'models-received');
- assert.deepEqual(r.models,['llama-3.1-8b-instant']);
+ assert.deepEqual(r.models,['openai/gpt-oss-20b']);
  assert.equal(r.httpStatus,200);assert.equal(r.totalActiveModels,1);
  assert.doesNotMatch(JSON.stringify(r),/SYNTHETIC_TEST_KEY_NOT_REAL/);
 });
@@ -47,9 +47,10 @@ test('Reject oversized payloads and malformed metadata',async()=>{
  ]){const r=await probeGroqModels({credential,fetchImpl:async()=>response});assert.equal(r.state,'invalid-response');}
 });
 test('Model recommendation only uses received active list; never auto-switches',()=>{
- assert.deepEqual(recommendGroqModel(['llama-3.3-70b-versatile'],'llama-3.3-70b-versatile').model,'llama-3.3-70b-versatile');
- const recommended=recommendGroqModel(['llama-3.1-8b-instant','openai/gpt-oss-20b'],'missing');
- assert.equal(recommended.model,'llama-3.1-8b-instant');assert.match(recommended.reason,/verify free-plan/i);
+ assert.equal(recommendGroqModel(['llama-3.3-70b-versatile'],'llama-3.3-70b-versatile').model,null);
+ assert.equal(recommendGroqModel(['openai/gpt-oss-20b'],'openai/gpt-oss-20b').model,'openai/gpt-oss-20b');
+ const recommended=recommendGroqModel(['llama-3.1-8b-instant','openai/gpt-oss-20b'],'llama-3.1-8b-instant');
+ assert.equal(recommended.model,'openai/gpt-oss-20b');assert.match(recommended.reason,/retired for the free/i);
  assert.equal(recommendGroqModel(['audio-only'],'missing').model,null);
  assert.equal(recommendGroqModel([], 'missing').model,null);
 });
