@@ -1,3 +1,4 @@
+import {validateBinaryAssets} from './binary-assets.js';
 export const VERSION = 'B0.3.3';
 export const APP_KEY = 'mm-studio-v03';
 export const MAX_FILES = 120;
@@ -72,7 +73,7 @@ const record = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const textField = (v,max=100000) => typeof v === 'string' && v.length <= max;
 const idField = v => textField(v,140) && v.length > 0;
 const uniqueIds = items => new Set(items.map(x=>x.id)).size === items.length;
-function validProject(p){return record(p) && idField(p.id) && textField(p.name,100) && idField(p.active) && safeFiles(p.files) && Object.hasOwn(p.files,p.active) && textField(p.updated,80);}
+function validProject(p){return record(p) && idField(p.id) && textField(p.name,100) && idField(p.active) && safeFiles(p.files) && Object.hasOwn(p.files,p.active) && textField(p.updated,80) && (p.binaryAssets===undefined||validateBinaryAssets(p.binaryAssets,p.files));}
 function validSnapshot(s){return record(s) && idField(s.id) && textField(s.at,80) && textField(s.label,60) && (s.pinned===undefined||typeof s.pinned==='boolean') && validProject(s.project);}
 function validMessage(m){return record(m) && ['user','assistant','system'].includes(m.role) && textField(m.content,60000) && (m.provider===undefined||textField(m.provider,140)) && (m.model===undefined||textField(m.model,140)) && (m.error===undefined||typeof m.error==='boolean') && (m.at===undefined||textField(m.at,80));}
 function validThread(t){return record(t) && idField(t.id) && textField(t.title,300) && textField(t.created,80) && Array.isArray(t.messages) && t.messages.length<=150 && t.messages.every(validMessage);}
