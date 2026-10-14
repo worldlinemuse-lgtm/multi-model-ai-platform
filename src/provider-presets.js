@@ -21,7 +21,7 @@ export function validateProviderPresets(items){
  return true;
 }
 export function parseProviderPresets(text){
- if(typeof text!=='string'||text.length<5||text.length>MAX_IMPORT)throw Error('Provider preset file must be JSON below 15 KB');
+ if(typeof text!=='string'||text.length>MAX_IMPORT)throw Error('Provider preset file must be JSON below 15 KB');
  let x;try{x=JSON.parse(text);}catch{throw Error('Provider presets are invalid JSON');}
  if(!x||x.format!==FORMAT||!validateProviderPresets(x.presets))throw Error('Provider preset list failed strict validation');
  return x.presets.map(({label,provider,model})=>({label,provider,model}));
