@@ -41,3 +41,22 @@ export function moveProjectFolder(files,active,source,target){
  // resulting destination names are unique, regardless of iteration order.
  return {files:result,active:active.startsWith(source+'/')?target+active.slice(source.length):active,moved};
 }
+
+/* Copy a virtual folder without touching disk and never overwrite existing file keys. */
+export function copyProjectFolder(files,active,source,target){
+ if(!safeFiles(files))throw Error('Project files are invalid.');
+ if(typeof source!=='string'||typeof target!=='string'||!safeName(source)||!safeName(target))throw Error('Choose valid relative folder paths.');
+ if(!projectFolders(files).includes(source))throw Error('Source folder does not exist.');
+ if(source===target||target.startsWith(source+'/'))throw Error('Cannot copy a folder inside itself.');
+ const selected=Object.entries(files).filter(([name])=>name.startsWith(source+'/'));
+ if(!selected.length)throw Error('Folder has no files.');
+ const additions={};const copied=[];
+ for(const [name,value] of selected){
+  const next=target+name.slice(source.length);
+  if(Object.hasOwn(files,next)||Object.hasOwn(additions,next))throw Error('Folder copy collides with an existing file.');
+  additions[next]=value;copied.push({from:name,to:next});
+ }
+ const result={...files,...additions};
+ if(!safeFiles(result))throw Error('Folder copy exceeds workspace limits.');
+ return {files:result,active,copied};
+}

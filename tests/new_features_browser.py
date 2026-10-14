@@ -47,6 +47,16 @@ def check(page):
     expect(page.locator("#wasm-output")).to_contain_text("Result: 42",timeout=20000)
     expect(page.locator("#wasm-stop")).to_be_disabled()
     print("PASS: Q07 real WASM compiled and ran in isolated browser worker",flush=True)
+    page.locator('[data-view="workspace"]').first.click()
+    answers=iter(['src/test_q14/file.js','src/test_q14','src/duplicated_q14',''])
+    page.on('dialog',lambda d:d.accept(next(answers,'')))
+    page.locator('#add-file').click()
+    page.locator('#code-editor').fill('Q14_SRC_CONTENT')
+    page.locator('#copy-folder').click()
+    expect(page.locator('#file-tree .file-entry[title="src/duplicated_q14/file.js"]')).to_have_count(1)
+    expect(page.locator('#code-editor')).to_have_value('Q14_SRC_CONTENT')
+    print("PASS: Q14 browser-local virtual folder copy preserved source",flush=True)
+
 
 def main():
     parser=argparse.ArgumentParser()
