@@ -640,6 +640,15 @@ def check_capabilities(p):
     p.locator('#capability-refresh').click()
     p.wait_for_function("() => document.querySelector('#capability-refresh').disabled === false",polling=100,timeout=12000)
     verify(p.locator('#capability-live-list .capability-row').count()>=10,'P30 refreshed feature probes missing')
+def check_q27_local_webgpu_readiness(p):
+    screen(p,'capabilities')
+    verify('Not checked' in p.locator('#ondevice-probe-result').inner_text(),'Q27 must be user-triggered')
+    p.locator('#ondevice-probe').click()
+    p.wait_for_function("() => document.querySelector('#ondevice-probe-result').textContent.includes('No model was downloaded, loaded, or executed.') || document.querySelector('#ondevice-probe-result').textContent.includes('No model inference was attempted.')",timeout=16000)
+    status=p.locator('#ondevice-probe-result').inner_text()
+    verify(any(word in status for word in ['UNAVAILABLE','NO-ADAPTER','ADAPTER-ONLY','INSECURE','PROBE-FAILED','could not be checked']), 'Q27 readiness status not bounded')
+    verify(p.locator('#ondevice-probe').is_enabled(),'Q27 probe remained disabled')
+
 def check_mobile(p):
     p.set_viewport_size({'width':375,'height':800})
     p.locator('#mobile-menu').click()
@@ -733,6 +742,7 @@ CASES=[
  ('Canvas media adjustments, PNG and speech controls',check_media),
  ('Preferences, backup, restore rejection, persisted settings and reset',check_settings),
  ('Capability inventory truth labels',check_capabilities),
+ ('Q27 local WebGPU adapter readiness without inference',check_q27_local_webgpu_readiness),
  ('Mobile navigation interactions',check_mobile),
 ]
 def main():
