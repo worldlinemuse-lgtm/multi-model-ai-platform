@@ -34,5 +34,6 @@ test('Q25 mixed text+PNG archive preserves raw bytes with bounded binary policy'
 });
 test('Q25 ZIP rejects unknown binary policy or invalid value type',async()=>{
  assert.throws(()=>zipFiles({'main.js':42}),/text or byte arrays/);
- await assert.rejects(()=>unzipFiles(await zipFiles({'file.txt':'safe'}).arrayBuffer(),{binaryExtensions:['exe']}),/binary extension policy/);
+ const archive=await zipFiles({'file.txt':'safe'}).arrayBuffer();
+ await assert.rejects(()=>unzipFiles(archive,{binaryExtensions:['exe']}),/binary extension policy/);
 });
