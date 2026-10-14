@@ -227,8 +227,9 @@ def check_chat(p):
     p.locator('#chat-route').select_option('groq')
     token_caps=[]
     def inspect_cap(route):
-        try:token_caps.append(json.loads(route.request.post_data or '{}').get('max_tokens'))
-        except (ValueError,TypeError):token_caps.append(None)
+        if route.request.method!='OPTIONS':
+            try:token_caps.append(json.loads(route.request.post_data or '{}').get('max_tokens'))
+            except (ValueError,TypeError):token_caps.append(None)
         fake_groq(route)
     p.route('https://api.groq.com/**',inspect_cap)
     p.locator('#chat-output-tokens').select_option('256')
