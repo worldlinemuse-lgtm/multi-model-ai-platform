@@ -56,6 +56,15 @@ def check(page):
     expect(page.locator('#file-tree .file-entry[title="src/duplicated_q14/file.js"]')).to_have_count(1)
     expect(page.locator('#code-editor')).to_have_value('Q14_SRC_CONTENT')
     print("PASS: Q14 browser-local virtual folder copy preserved source",flush=True)
+    page.locator('[data-view="datalab"]').first.click()
+    page.locator('#data-input').fill('team,points\nAlpha,10\nAlpha,\nBeta,5')
+    page.locator('#data-analyze').click()
+    page.locator('#data-group-field').select_option('team')
+    page.locator('#data-group-value').select_option('points')
+    page.locator('#data-group-run').click()
+    expect(page.locator('#data-group-output')).to_contain_text('Alpha: 1/2 observed',timeout=10000)
+    print("PASS: Q15 grouped numeric summary with missing-value handling",flush=True)
+
 
 
 def main():
