@@ -43,6 +43,7 @@ jobs:
           done
           python -u tests/browser_smoke.py --base-url http://127.0.0.1:8000
           python -u tests/startup_integrity_browser.py --base-url http://127.0.0.1:8000
+          python -u tests/sw_nonblocking_boot_browser.py --base-url http://127.0.0.1:8000
           python -u tests/browser_regression.py --base-url http://127.0.0.1:8000
           python -u tests/full_site_browser.py --base-url http://127.0.0.1:8000
           python -u tests/groq_connection_browser.py --base-url http://127.0.0.1:8000
@@ -94,6 +95,7 @@ jobs:
           set -euo pipefail
           python -u tests/browser_smoke.py --base-url "$DEPLOYED_URL"
           python -u tests/startup_integrity_browser.py --base-url "$DEPLOYED_URL"
+          python -u tests/sw_nonblocking_boot_browser.py --base-url "$DEPLOYED_URL"
           python -u tests/browser_regression.py --base-url "$DEPLOYED_URL"
           python -u tests/full_site_browser.py --base-url "$DEPLOYED_URL"
           python -u tests/groq_connection_browser.py --base-url "$DEPLOYED_URL"
