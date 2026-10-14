@@ -194,6 +194,26 @@ def check_providers(p):
     p.locator('.provider-card button').click()
     verify(p.locator('#view-vault').is_visible(),'Provider key button does not open vault')
     verify(p.locator('#key-provider').input_value()=='groq','Selected provider not carried to vault')
+def check_q26_provider_model_presets(p):
+    screen(p,'providers')
+    manifest={'format':'mm-studio-provider-presets-v1','presets':[
+       {'label':'Synthetic reusable model','provider':'groq','model':'llama-3.3-70b-versatile'}]}
+    approve(p)
+    p.locator('#provider-preset-import').set_input_files({'name':'presets.json','mimeType':'application/json','buffer':json.dumps(manifest).encode()})
+    p.wait_for_function("document.querySelector('#provider-preset-count').textContent.includes('1 saved')",timeout=13000)
+    p.locator('#provider-preset-select').select_option('0')
+    verify(p.locator('#provider-preset-apply').is_enabled(),'Q26 valid preset cannot be applied')
+    p.locator('#provider-preset-apply').click()
+    verify(p.locator('#view-vault').is_visible(),'Q26 preset did not open the vault form')
+    verify(p.locator('#key-provider').input_value()=='groq','Q26 preset route mismatch')
+    verify(p.locator('#key-model').input_value()=='llama-3.3-70b-versatile','Q26 preset model mismatch')
+    verify('NOT CREATED' in p.locator('#vault-status').inner_text(),'Q26 preset must not create a vault or connect')
+    screen(p,'providers')
+    with p.expect_download() as exported:p.locator('#provider-preset-export').click()
+    payload=Path(exported.value.path()).read_text()
+    verify('mm-studio-provider-presets-v1' in payload,'Q26 export format not correct')
+    verify('TEST-FAKE-NOT-A-REAL-API-KEY' not in payload,'Q26 preset export revealed an API key')
+
 def check_vault(p):
     screen(p,'vault')
     for selector in ['#key-provider','#key-model','#key-value','#key-account','#key-attest','#save-key']:
@@ -695,6 +715,7 @@ CASES=[
  ('Isolated HTML preview tabs',check_html_preview),
  ('P04 linked local CSS and classic scripts in original order',check_linked_preview),
  ('Eight provider directory records and setup navigation',check_providers),
+ ('Q26 validated local provider presets without network calls',check_q26_provider_model_presets),
  ('Vault locked typing, encryption, persistence, wrong password, removal and wipe',check_vault),
  ('Q21 encrypted vault export/import and passphrase rotation',check_vault_portability),
  ('Mocked API adapter through chat, history, audit and export',check_chat),
