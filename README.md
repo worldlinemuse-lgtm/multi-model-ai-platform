@@ -1,4 +1,4 @@
-# Multi-Model Studio · B0.3.3
+# Multi-Model Studio · B0.4.0 development
 
 A **browser-first, free-tier-first AI workbench** built in the dedicated repository [worldlinemuse-lgtm/multi-model-ai-platform](https://github.com/worldlinemuse-lgtm/multi-model-ai-platform). This is an experimental static web application; Muse's existing website is separate.
 
@@ -14,7 +14,7 @@ If that URL does not open the studio, follow [GitHub Pages setup](docs/DEPLOYMEN
 python -m http.server 8000
 ```
 
-Then open `http://localhost:8000`. It requires no npm build command. For code checks, install Node 20+ and run `npm test`.
+Then open `http://localhost:8000`. It requires no npm build command. For code checks, use supported Node 22+ (CI tests with Node 24) and run `npm test`.
 
 ## Getting started
 
@@ -80,3 +80,24 @@ This release addresses a first controlled subset of the 60-item functional compl
 - **Regression coverage:** new Node tests and isolated real-Chromium workflows on checkout and deployed Pages, including simulated IndexedDB write failure with fake data and fake key slots. No real credentials are sent in tests.
 
 **Still incomplete:** Actual provider end-to-end inference; backend search; per-account quota observation; multi-stage independent model assignment; complex language runtimes, Python acceptance; richer IDE, images, media and document extraction; agent workflows. The remaining audit findings are preserved unchanged.
+
+
+## Development status and 2026-10-14 startup reliability work
+
+**Deployment truth:** The last separately verified production revision before this repair was `078672e7b35a3f34a8f8bde05885804fec1a92ab` (GitHub Actions run `38510367623`: checks, deploy, hosted browser acceptance passed). This B0.4.0 source increment must not be called released until its own post-merge production deployment and hosted browser checks pass. It does not establish live provider/account connectivity.
+
+The Q17–Q27 development series delivered **limited, tested scope** in the browser workbench:
+
+- **Q17/Q18/Q19:** supervised workflow stages with explicit route selection and local-evidence retrieval. Provider requests require operator-owned credentials and browser CORS support.
+- **Q20/Q21:** explicit output-token cap, encrypted-only vault export/import, passphrase rotation and authenticated backup import before replacement.
+- **Q22/Q23:** local-only connection diagnosis, manual retry drafting and staged offline cache refresh with failure preservation.
+- **Q24/Q25:** paginated local knowledge results and bounded per-project image/audio binary assets.
+- **Q26/Q27:** validated declarative provider presets and read-only WebGPU compatibility probes. **No on-device LLM engine or model weights are shipped.**
+
+**Known limitation:** No authenticated live provider response has yet been independently accepted. The system does not claim real remaining free quotas, provider CORS verification, automatic paid fallback, cross-device collaboration, or autonomous code writes.
+
+**Startup hardening in this development increment:** the app records an explicit document-level `data-mm-boot` state (`starting`, `ready`, `degraded`, or `failed`). If specific optional UI controls are missing from a partially updated/cached HTML document, those features report degradation instead of throwing a null `hidden` property exception. Browser acceptance fails unless the boot state is fully `ready`, including when initialization errors were caught rather than emitted as uncaught page errors. This is a defensive mitigation; a specific root cause for an externally reported live-site error is not yet independently reproduced.
+
+**Cloudflare Workers AI:** the request adapter now preserves `system` messages as Cloudflare's documented chat-format models accept them, including workflow instructions. Newly created key slots default to the supported FP8 Llama 3.1 model; existing saved model selections are not rewritten. Neither change constitutes a successful live API test.
+
+**GitHub Actions:** first-party checkout/setup-node/setup-python actions use Node 24-compatible official major releases; application unit checks run under Node 24. The hosted Chromium suite includes normal startup and a deliberately mismatched HTML fixture. The older versioned release archives remain unchanged.
