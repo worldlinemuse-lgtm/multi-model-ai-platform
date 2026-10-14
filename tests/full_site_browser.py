@@ -336,6 +336,29 @@ def check_knowledge(p):
     p.wait_for_function("document.querySelector('#note-count').textContent.includes('1 notes')")
     p.locator('#knowledge-import').set_input_files({'name':'extra.txt','mimeType':'text/plain','buffer':b'imported extra reference'})
     p.wait_for_function("document.querySelector('#note-count').textContent.includes('2 notes')")
+def check_paged_knowledge(p):
+    screen(p,'knowledge')
+    archive={'format':'mm-studio-notes-v1','notes':[
+       {'id':'q24-note-'+str(i),'title':'Pagination QA '+str(i).zfill(2),
+        'content':'Unique page candidate '+str(i),'created':'2026-10-14T00:00:00Z'}
+       for i in range(43)]}
+    p.locator('#knowledge-import').set_input_files({'name':'q24-notes.json','mimeType':'application/json','buffer':json.dumps(archive).encode()})
+    p.wait_for_function("document.querySelector('#note-count').textContent.includes('43 notes')",timeout=20000)
+    p.locator('#knowledge-search').fill('Pagination QA')
+    expect(p.locator('#knowledge-results button')).to_have_count(20,timeout=10000)
+    verify('Page 1 of 3' in p.locator('#knowledge-page-info').inner_text(),'Q24 first page count absent')
+    verify(p.locator('#knowledge-page-prev').is_disabled(),'Q24 Previous enabled at first page')
+    p.locator('#knowledge-page-next').click()
+    verify('Page 2 of 3' in p.locator('#knowledge-page-info').inner_text(),'Q24 second page absent')
+    expect(p.locator('#knowledge-results button')).to_have_count(20)
+    p.locator('#knowledge-page-next').click()
+    verify('Page 3 of 3' in p.locator('#knowledge-page-info').inner_text(),'Q24 third page absent')
+    expect(p.locator('#knowledge-results button')).to_have_count(3)
+    verify(p.locator('#knowledge-page-next').is_disabled(),'Q24 Next enabled beyond final page')
+    p.locator('#knowledge-search').fill('Pagination QA 42')
+    verify('Page 1 of 1' in p.locator('#knowledge-page-info').inner_text(),'Q24 search did not reset current page')
+    expect(p.locator('#knowledge-results button')).to_have_count(1)
+
 def check_data(p):
     screen(p,'datalab')
     p.locator('#data-input').fill('title,value\nOne,10\nMissing,\nTwo,20')
@@ -651,6 +674,7 @@ CASES=[
  ('P14 local conversation search edit export delete',check_chat_management),
  ('Mocked three-stage workflow and stage cap',check_workflows),
  ('Knowledge note creation, retrieval, chat insertion and archive roundtrip',check_knowledge),
+ ('Q24 paged local Knowledge search beyond prior 70-result truncation',check_paged_knowledge),
  ('P15 explicit note edit/cancel and exact duplicate report',check_note_edit_and_duplicates),
  ('D13 live knowledge after project-file edits',check_knowledge_freshness),
  ('P16 cross-project knowledge search and live context',check_cross_project_knowledge),
