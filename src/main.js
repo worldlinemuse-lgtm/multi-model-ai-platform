@@ -211,7 +211,7 @@ async function importProject(file){
    active=Object.hasOwn(files,'main.js')?'main.js':Object.keys(files)[0];
   }else{
    const payload=JSON.parse(await file.text());
-   if(!payload||!payload.files||!payload.active)throw Error('Not a supported project JSON format');
+   if(!payload||!['mm-platform-b01','mm-platform-binary-v1'].includes(payload.format)||!payload.files||!payload.active)throw Error('Not a supported project JSON format');
    files=payload.files;active=payload.active;binaryAssets=payload.binaryAssets||{};
   }
   if(!safeFiles(files)||!Object.hasOwn(files,active)||!validateBinaryAssets(binaryAssets,files))throw Error('Project contains unsafe text or binary files, names or sizes.');
