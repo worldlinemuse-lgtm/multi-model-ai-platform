@@ -609,6 +609,33 @@ def check_vault_portability(p):
     p.wait_for_function("document.querySelector('#vault-status').textContent === 'UNLOCKED'",timeout=16000)
     verify('GroqCloud' in p.locator('#vault-items').inner_text(),'Q21 imported encrypted vault credentials unavailable after old passphrase')
 
+def check_local_connection_diagnostics_and_manual_retry(p):
+    screen(p,'providers')
+    p.locator('#provider-check-local').click()
+    verify('missing-key' in p.locator('#provider-diagnostics').inner_text(),'Q22 missing-key state not reported')
+    setup_vault(p)
+    screen(p,'providers')
+    p.locator('#provider-check-local').click()
+    report=p.locator('#provider-diagnostics').inner_text()
+    verify('GroqCloud: configured-unverified' in report,'Q22 configured state missing')
+    verify('TEST-FAKE-NOT-A-REAL-API-KEY' not in report,'Q22 diagnostic leaked synthetic API key')
+    screen(p,'chat')
+    p.locator('#chat-route').select_option('groq')
+    requests=[]
+    def fail_synthetically(route):
+        if route.request.method=='POST':requests.append(route.request.url)
+        route.fulfill(status=429,headers={'Content-Type':'application/json','Access-Control-Allow-Origin':'*'},
+            body='{"error":{"message":"Synthetic provider rate limit"}}')
+    p.route('https://api.groq.com/**',fail_synthetically)
+    p.locator('#chat-input').fill('Q22 manual retry prompt only')
+    p.locator('#send-chat').click()
+    p.wait_for_function("document.querySelector('#chat-messages').textContent.includes('Synthetic provider rate limit')",timeout=15000)
+    verify(len(requests)==1,'Q22 fixture must fail exactly one provider call')
+    approve(p)
+    p.locator('#chat-retry-draft').click()
+    verify(p.locator('#chat-input').input_value()=='Q22 manual retry prompt only','Q22 original failed message was not restored')
+    verify(len(requests)==1,'Q22 preparing retry must never send another request')
+
 CASES=[
  ('12-screen navigation and command palette',check_navigation),
  ('Workspace projects, files, runner, snapshots, JSON ZIP and import/export',check_workspace),
@@ -620,6 +647,7 @@ CASES=[
  ('Vault locked typing, encryption, persistence, wrong password, removal and wipe',check_vault),
  ('Q21 encrypted vault export/import and passphrase rotation',check_vault_portability),
  ('Mocked API adapter through chat, history, audit and export',check_chat),
+ ('Q22 network-free diagnostics and manual retry draft',check_local_connection_diagnostics_and_manual_retry),
  ('P14 local conversation search edit export delete',check_chat_management),
  ('Mocked three-stage workflow and stage cap',check_workflows),
  ('Knowledge note creation, retrieval, chat insertion and archive roundtrip',check_knowledge),
