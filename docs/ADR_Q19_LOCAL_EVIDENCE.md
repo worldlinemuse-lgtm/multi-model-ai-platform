@@ -1,0 +1,7 @@
+# Q19 — browser-local grounding and evidence excerpts
+
+2026-10-14. This implements strictly local lexical retrieval over existing user notes and project source only, not external web retrieval, semantic embeddings or verified research. Limit 400 indexed entries, 1.2M scanned characters, 8 results, 260-character excerpts and 8.5K output. Citations identify exact source title/kind and 1-indexed line, without inventing inaccessible URLs. Search results use plain text only; the human reviews and chooses whether to insert content into chat (never automatically send to a provider). User-supplied source content is untrusted model data and may contain prompt injection. Reject malformed input and protect CPU/memory. Do not describe excerpt snippets as verified scientific or internet evidence.
+
+Reference standards: W3C PROV https://www.w3.org/TR/prov-o/ (provenance as an explicit source relationship, not implied verification); MDN Node.textContent https://developer.mozilla.org/en-US/docs/Web/API/Node/textContent (render untrusted text without innerHTML); OWASP Prompt Injection https://community.owasp.org/attacks/PromptInjection (retrieved data is not a higher authority instruction). No code copied from references.
+
+Acceptance: Node exact-line/reference/negative bounds tests; browser UI renders without HTML execution, human-selected insert without automatic model call; hosted exact-file integrity and offline shell; imported content provenance limits documented.
