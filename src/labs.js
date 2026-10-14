@@ -95,7 +95,7 @@ export function setupLabs({el,toast,download,getDatasets=()=>[],commitDatasets=a
   if(!selectedImage)return;
   try{
    const spec=renderImageTo(ctx);
-   $('media-resolution-status').textContent=`Preview: ${spec.width} × ${spec.height}px · Cropped source: ${spec.sw} × ${spec.sh}px · Export at ${$('media-original-resolution').checked?'original':'preview'} resolution · Rotation: ${rotation}°.`;
+   $('media-resolution-status').textContent=`Preview: ${spec.width} × ${spec.height}px · Original: ${selectedImage.naturalWidth} × ${selectedImage.naturalHeight}px · Cropped source: ${spec.sw} × ${spec.sh}px · Export at ${$('media-original-resolution').checked?'original':'preview'} resolution · Rotation: ${rotation}°.`;
    $('media-undo').disabled=imageUndo.length===0;
   }catch(error){$('media-resolution-status').textContent='Image update failed: '+String(error?.message||error);toast('Image update rejected.',true);}
  }
