@@ -7,6 +7,7 @@ import {zipFiles,unzipFiles} from './zip.js';
 import {setupLabs} from './labs.js';
 import {projectFolders,projectTreeEntries,moveProjectFolder} from './project-files.js';
 import {parseNoteArchive,exportNoteArchive} from './knowledge.js';
+import {readKnowledgeDocument} from './knowledge-documents.js';
 import {readBrowserCapabilities} from './capability-probes.js';
 import {editLocalNote,findExactNoteDuplicates} from './note-tools.js';
 import {compareProjectFiles} from './snapshot-diff.js';
@@ -120,7 +121,36 @@ function cancelNoteEdit(){editingNoteId=null;$('knowledge-title').value='';$('kn
 function beginNoteEdit(){const live=resolveActiveKnowledge();if(!live||live.type!=='note')return toast('Select a saved note to edit; project files are edited in Code Studio.',true);if(editingNoteId&&editingNoteId!==live.id&&!confirm('Discard unsaved note edits and switch to the selected note?'))return;editingNoteId=live.id;$('knowledge-title').value=live.title;$('knowledge-content').value=live.content;$('knowledge-submit').textContent='Save changes';$('knowledge-cancel-edit').hidden=false;$('knowledge-title').focus();}
 function showDuplicateNotes(){const groups=findExactNoteDuplicates(state.notes);const box=$('knowledge-duplicate-report');box.hidden=false;box.textContent=groups.length?'Exact-content duplicate groups (nothing deleted):\n'+groups.map((g,i)=>(i+1)+'. '+g.count+' notes: '+g.notes.map(n=>n.title+' ['+n.id.slice(-8)+']').join(' | ')).join('\n'):'No exact-content duplicates found. Nothing was deleted.';}
 function submitKnowledge(e){e.preventDefault();const title=$('knowledge-title').value.trim(),content=$('knowledge-content').value;if(!title||!content.trim())return toast('Both title and note content are required.',true);if(editingNoteId){const existing=state.notes.find(n=>n.id===editingNoteId);if(!existing){cancelNoteEdit();return toast('The edited note no longer exists.',true);}if(existing.title===title&&existing.content===content)return toast('No note changes to save.');if(!confirm('Replace the saved content of note "'+existing.title+'"? This changes the local record. Export a backup first if necessary.'))return;try{state.notes=editLocalNote(state.notes,editingNoteId,title,content,now());activeNote={type:'note',id:editingNoteId,title,content};cancelNoteEdit();renderKnowledge();saveSoon();toast('Note changes saved locally.');}catch(error){toast('Note edit rejected: '+error.message,true);}return;}if(state.notes.length>=MAX_NOTES)return toast('Note limit reached; export notes first.',true);state.notes.unshift({id:uid('note'),title,content,created:now()});cancelNoteEdit();renderKnowledge();saveSoon();toast('Knowledge note saved.');}
-async function importKnowledge(input){const files=Array.from(input.files||[]);input.value='';if(files.length>15)return toast('Import at most 15 documents per batch.',true);const pending=[];try{for(const file of files){if(file.size>30_000_000)throw Error(`${file.name}: file exceeds 30 MB maximum`);if(file.name.toLowerCase().endsWith('.json')){const content=await file.text();const archived=parseNoteArchive(content);if(archived!==null){for(const note of archived)pending.push({...note,id:uid('note')});continue;}if(file.size>100000)throw Error(`${file.name}: text document exceeds 100 KB`);pending.push({id:uid('note'),title:file.name.slice(0,100),content:content.slice(0,100000),created:now()});continue;}if(file.size>100000)throw Error(`${file.name}: document exceeds 100 KB`);const content=await file.text();const prefix=file.name.toLowerCase().endsWith('.csv')?csvSummary(content)+'\n\n':'';pending.push({id:uid('note'),title:file.name.slice(0,100),content:(prefix+content).slice(0,100000),created:now()});}if(state.notes.length+pending.length>MAX_NOTES)throw Error(`Note capacity exceeded (maximum ${MAX_NOTES})`);if(!pending.length)return toast('No documents selected.',true);state.notes.push(...pending);saveSoon();renderKnowledge();toast(`${pending.length} note(s) imported.`);}catch(e){toast('Import failed: '+errorText(e),true);}}
+async function importKnowledge(input){
+ const files=Array.from(input.files||[]);input.value='';
+ if(files.length>15)return toast('Import at most 15 documents per batch.',true);
+ const pending=[];
+ try{
+  for(const file of files){
+   const name=file.name.toLowerCase();
+   if(name.endsWith('.pdf'))throw Error(file.name+': PDF extraction is not supported. No notes were imported.');
+   if(name.endsWith('.docx')){
+    const extracted=await readKnowledgeDocument(file);
+    pending.push({id:uid('note'),title:extracted.title,content:extracted.text,created:now()});
+    continue;
+   }
+   if(!/\.(txt|md|csv|json)$/.test(name))throw Error(file.name+': unsupported document type');
+   if(name.endsWith('.json')&&file.size>30_000_000)throw Error(file.name+': JSON archive exceeds 30 MB');
+   if(!name.endsWith('.json')&&file.size>100000)throw Error(file.name+': text document exceeds 100 KB');
+   const content=await file.text();
+   if(name.endsWith('.json')){
+    const archived=parseNoteArchive(content);
+    if(archived!==null){for(const note of archived)pending.push({...note,id:uid('note')});continue;}
+    if(file.size>100000)throw Error(file.name+': text document exceeds 100 KB');
+   }
+   const prefix=name.endsWith('.csv')?csvSummary(content)+'\n\n':'';
+   pending.push({id:uid('note'),title:file.name.slice(0,100),content:(prefix+content).slice(0,100000),created:now()});
+  }
+  if(state.notes.length+pending.length>MAX_NOTES)throw Error('Note capacity exceeded (maximum '+MAX_NOTES+')');
+  if(!pending.length)return toast('No documents selected.',true);
+  state.notes.push(...pending);saveSoon();renderKnowledge();toast(pending.length+' note(s) imported.');
+ }catch(e){toast('Import failed: '+errorText(e),true);}
+}
 async function refreshLocalCapabilities(){const epoch=++capabilityProbeEpoch,host=$('capability-live-list'),button=$('capability-refresh');button.disabled=true;host.textContent='Checking local browser capability signals…';try{const readings=await readBrowserCapabilities(window);if(epoch!==capabilityProbeEpoch)return;host.replaceChildren();for(const reading of readings){const row=make('article','capability-row'),description=make('div');description.append(make('b','',reading.label),make('small','',reading.detail));row.append(description,make('span','tag muted',reading.status));host.append(row);} }catch(error){if(epoch===capabilityProbeEpoch)host.textContent='Browser capability diagnostics could not complete: '+errorText(error);}finally{if(epoch===capabilityProbeEpoch)button.disabled=false;}}
 function renderCapabilities(){const host=clearNode($('capability-list'));for(const [code,title,status,description]of CAPABILITIES){const row=make('article','capability-row');row.append(make('span','',status==='local'?'✓':status==='conditional'?'◇':'○'));const details=make('div');details.append(make('b','',`${code} · ${title}`),make('small','',description));row.append(details,make('span','tag '+(status==='local'?'good':status==='conditional'?'pending':'muted'),({local:'LOCAL',conditional:'EXTERNAL',partial:'PARTIAL',planned:'PLANNED'})[status]));host.append(row);}refreshLocalCapabilities();}
 function renderSettings(){$('recovery-tools').hidden=recoveryRaw===null;if(recoveryRaw!==null)$('recovery-description').textContent='Unparseable '+(recoveryKind==='legacy'?'legacy B0.1/B0.2 project':'B0.3 browser state')+' detected. Original data has not been overwritten. Download a raw backup before resetting.';$('accent-select').value=state.preferences.accent;$('compact-toggle').checked=!!state.preferences.compact;$('platform-details').replaceChildren();for(const [k,v]of [['Build',VERSION],['Storage',storageMode()],['Security','Encrypted secrets; no keys in backups'],['Network','Provider requests only on explicit actions'],['GitHub','Public static source'],['Python','Optional Pyodide CDN runtime']]){const row=make('div');row.append(make('span','',k),make('strong','',v));$('platform-details').append(row);}}
