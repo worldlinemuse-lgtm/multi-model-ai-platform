@@ -1,6 +1,6 @@
 import {validateBinaryAssets} from './binary-assets.js';
 import {validateProviderPresets} from './provider-presets.js';
-export const VERSION = 'B0.3.3';
+export const VERSION = 'B0.4.0';
 export const APP_KEY = 'mm-studio-v03';
 export const MAX_FILES = 120;
 export const MAX_FILE_LENGTH = 500000;
@@ -11,7 +11,7 @@ export const PROVIDERS = Object.freeze([
   {id:'groq', name:'GroqCloud',model:'llama-3.3-70b-versatile',window:'Minute / day',transport:'OpenAI-compatible',kind:'key'},
   {id:'openrouter',name:'OpenRouter Free',model:'openrouter/free',window:'Minute / day',transport:'OpenAI-compatible',kind:'key'},
   {id:'gemini',name:'Google Gemini API',model:'gemini-2.5-flash-lite',window:'Minute / day',transport:'Gemini REST',kind:'key'},
-  {id:'cloudflare',name:'Cloudflare Workers AI',model:'@cf/meta/llama-3.1-8b-instruct',window:'Daily',transport:'Workers AI REST',kind:'key+account'},
+  {id:'cloudflare',name:'Cloudflare Workers AI',model:'@cf/meta/llama-3.1-8b-instruct-fp8',window:'Daily',transport:'Workers AI REST',kind:'key+account'},
   {id:'mistral',name:'Mistral Studio Free',model:'mistral-small-latest',window:'Recurring rate windows',transport:'OpenAI-compatible',kind:'key'},
   {id:'ollama',name:'Ollama Cloud Free',model:'',window:'Monthly',transport:'OpenAI-compatible',kind:'key'},
   {id:'huggingface',name:'Hugging Face Inference Providers',model:'',window:'Monthly',transport:'OpenAI-compatible',kind:'key'},
@@ -19,7 +19,7 @@ export const PROVIDERS = Object.freeze([
 ]);
 export const VIEWS = Object.freeze({overview:'Overview',workspace:'Code studio',chat:'Model chat',workflows:'Workflows',knowledge:'Knowledge',datalab:'Data lab',media:'Media tools',providers:'Free providers',vault:'Key vault',usage:'Usage & audit',capabilities:'Capabilities',settings:'Settings'});
 export const CAPABILITIES = [
-['B01','Conversation threads','local','Saved conversation threads; model replies require a connected route; editing and search not yet available'],
+['B01','Conversation threads','local','Saved conversation threads with search, user-message editing and export; model replies require an authorized provider route'],
 ['B02','Multi-file IDE','local','Editable source, file explorer, project selection, line numbers and snapshots'],
 ['B03','JavaScript execution','local','Terminating Web Worker inside opaque-origin sandbox'],
 ['B04','Python WebAssembly','conditional','Pyodide loads on demand over CDN and executes inside isolated worker'],
@@ -33,7 +33,7 @@ export const CAPABILITIES = [
 ['B12','Operator controls','local','Model route settings, stop buttons, audit and capability views'],
 ['B13','IndexedDB persistence','local','Browser-origin project, chat, notes, audit and encrypted vault storage'],
 ['B14','Data encryption','local','PBKDF2 + AES-GCM for credential vault, unlock required each session'],
-['B15','Document import','partial','Local text, Markdown, JSON and CSV notes; no integrated PDF extraction yet'],
+['B15','Document import','partial','Local text, Markdown, JSON, CSV and bounded DOCX extraction; PDF text extraction not implemented'],
 ['B16','Local data analysis','local','CSV/JSON analysis, browser charts and JavaScript/Python calculations'],
 ['B17','On-device AI inference','planned','No local model weights or WebGPU inference have been bundled'],
 ['B18','Knowledge retrieval','local','Simple local keyword search through notes and project files'],
@@ -43,7 +43,7 @@ export const CAPABILITIES = [
 ['E01','Provider onboarding','local','Eight verified dated catalog entries with official signup and key links'],
 ['E02','Credential handling','local','Encrypted local API keys with user-attested free plan'],
 ['E03','Live model inference','conditional','Direct browser fetch with provider key + CORS + eligible model/account'],
-['E04','Model comparison','conditional','Send the same prompt to two connected routes; explicit secondary selection is not yet available'],
+['E04','Model comparison','conditional','Explicit two-route comparison with separate provider histories, conditional on valid keys and network'],
 ['E05','Model routing','partial','Explicit route selection; quota-aware auto-routing not implemented'],
 ['E06','Allowance accounting','partial','Logs provider-reported tokens and local attempts; remaining quota unknown'],
 ['E07','Fallback routing','planned','No automatic billed or paid fallback'],
