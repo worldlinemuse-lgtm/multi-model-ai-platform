@@ -14,7 +14,7 @@ from urllib.request import Request, urlopen
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = (
     'index.html', 'styles.css', 'provider-guides.js',
-    'src/main.js', 'src/core.js', 'src/labs.js','src/speech-settings.js','src/image-transform.js', 'src/data-tools.js', 'src/project-files.js', 'src/preview-assets.js', 'src/note-tools.js', 'src/snapshot-diff.js', 'src/capability-probes.js', 'src/knowledge.js','src/wasm-policy.js','src/wasm-runner.js','src/wasm-worker.js','src/wasm-ui.js','src/expression-repl.js','src/expression-repl-worker.js','src/expression-repl-ui.js','src/workflow-plan.js','src/workflow-supervisor.js','src/local-evidence.js','src/knowledge-pages.js','src/model-request-settings.js','src/connection-diagnostics.js','src/review-edits.js','src/docx-text.js','src/knowledge-documents.js',
+    'src/main.js', 'src/core.js', 'src/labs.js','src/speech-settings.js','src/image-transform.js', 'src/data-tools.js', 'src/project-files.js', 'src/preview-assets.js', 'src/note-tools.js', 'src/snapshot-diff.js', 'src/capability-probes.js', 'src/knowledge.js','src/wasm-policy.js','src/wasm-runner.js','src/wasm-worker.js','src/wasm-ui.js','src/expression-repl.js','src/expression-repl-worker.js','src/expression-repl-ui.js','src/workflow-plan.js','src/workflow-supervisor.js','src/local-evidence.js','src/knowledge-pages.js','src/binary-assets.js','src/model-request-settings.js','src/connection-diagnostics.js','src/review-edits.js','src/docx-text.js','src/knowledge-documents.js',
     'src/provider-api.js','src/request-trace.js', 'src/sandbox.js', 'src/module-graph.js', 'src/module-linker.js', 'src/module-runtime.js', 'src/storage.js',
     'src/vault.js', 'src/zip.js', 'sw.js', 'favicon.svg',
 )

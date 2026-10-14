@@ -21,3 +21,19 @@ test('BUG-001: malicious DEFLATE output exceeding declared length is rejected',a
   const bytes=new Uint8Array(local.length+central.length+footer.length);bytes.set(local);bytes.set(central,local.length);bytes.set(footer,local.length+central.length);
   await assert.rejects(()=>unzipFiles(bytes.buffer),/inflated size exceeds declared bounds/);
 });
+
+test('Q25 mixed text+PNG archive preserves raw bytes with bounded binary policy',async()=>{
+ const png=Uint8Array.from([137,80,78,71,13,10,26,10,1,0,255,0]);
+ const project={'main.js':'console.log("binary asset test");','images/icon.png':png};
+ const archive=zipFiles(project);
+ const got=await unzipFiles(await archive.arrayBuffer(),{binaryExtensions:['png']});
+ assert.equal(got['main.js'],project['main.js']);
+ assert.deepEqual(got['images/icon.png'],png);
+ const asText=await unzipFiles(await archive.arrayBuffer());
+ assert.equal(typeof asText['images/icon.png'],'string','default legacy import stays text-only');
+});
+test('Q25 ZIP rejects unknown binary policy or invalid value type',async()=>{
+ assert.throws(()=>zipFiles({'main.js':42}),/text or byte arrays/);
+ const archive=await zipFiles({'file.txt':'safe'}).arrayBuffer();
+ await assert.rejects(()=>unzipFiles(archive,{binaryExtensions:['exe']}),/binary extension policy/);
+});

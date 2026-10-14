@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 const source=readFileSync(new URL('../sw.js',import.meta.url),'utf8');
 const base='https://example.github.io/multi-model-ai-platform/';
-const BASE_CACHE='mm-studio-shell-b03-26';
+const BASE_CACHE='mm-studio-shell-b03-27';
 function harness({online=true,existingCaches=[],failRefresh=false,failControl=false}={}){
  const callbacks={},deleted=[],stores=new Map(existingCaches.map(name=>[name,new Map()]));
  const net={online},failures={refresh:failRefresh,control:failControl};
@@ -121,7 +121,7 @@ test('Q23: offline after failed first refresh falls back to original base shell'
 });
 test('Q23: activation preserves active version slots, control and unrelated cache but deletes superseded shells',async()=>{
  const keep=[BASE_CACHE,BASE_CACHE+'-refresh-a',BASE_CACHE+'-refresh-b',BASE_CACHE+'-control','other-app-cache'];
- const old=['mm-studio-shell-b03-19','mm-studio-shell-b03-20','mm-studio-shell-b03-21','mm-studio-shell-b03-22','mm-studio-shell-b03-23','mm-studio-shell-b03-24','mm-studio-shell-b03-25'];
+ const old=['mm-studio-shell-b03-19','mm-studio-shell-b03-20','mm-studio-shell-b03-21','mm-studio-shell-b03-22','mm-studio-shell-b03-23','mm-studio-shell-b03-24','mm-studio-shell-b03-25','mm-studio-shell-b03-26'];
  const h=harness({existingCaches:[...keep,...old]});await h.activate();
  assert.deepEqual(h.deleted,old);
  for(const n of keep)assert.ok(h.stores.has(n));

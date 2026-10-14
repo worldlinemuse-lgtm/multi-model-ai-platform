@@ -359,6 +359,33 @@ def check_paged_knowledge(p):
     verify('Page 1 of 1' in p.locator('#knowledge-page-info').inner_text(),'Q24 search did not reset current page')
     expect(p.locator('#knowledge-results button')).to_have_count(1)
 
+def check_q25_binary_project_assets(p):
+    screen(p,'workspace')
+    png=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==')
+    p.locator('#binary-asset-import').set_input_files({'name':'icon.png','mimeType':'image/png','buffer':png})
+    expect(p.locator('#binary-assets-list button')).to_have_count(1,timeout=12000)
+    p.locator('#binary-assets-list button').click()
+    expect(p.locator('#binary-asset-preview img')).to_be_attached(timeout=8000)
+    verify(p.locator('#binary-asset-preview img').get_attribute('src').startswith('blob:'),'Q25 local preview must use revocable blob URL')
+    with p.expect_download() as saved:p.locator('#export-json').click()
+    obj=json.loads(Path(saved.value.path()).read_text())
+    verify('binaryAssets' in obj,'Q25 project JSON must include binary assets')
+    verify(base64.b64decode(obj['binaryAssets']['icon.png']['base64'])==png,'Q25 project JSON changed media bytes')
+    with p.expect_download() as savedzip:p.locator('#export-zip').click()
+    with zipfile.ZipFile(savedzip.value.path(),'r') as z:
+        verify(z.read('icon.png')==png,'Q25 exported ZIP did not preserve raw media')
+    approve(p)
+    p.locator('#import-project').set_input_files({'name':'new-project.zip','mimeType':'application/zip','buffer':Path(savedzip.value.path()).read_bytes()})
+    p.wait_for_function("document.querySelector('#binary-assets-list').textContent.includes('icon.png')",timeout=15000)
+    p.locator('#binary-assets-list button').click()
+    verify(p.locator('#binary-asset-delete').is_enabled(),'Q25 media removal disabled')
+    approve(p)
+    p.locator('#binary-asset-delete').click()
+    expect(p.locator('#binary-assets-list button')).to_have_count(0,timeout=8000)
+    # Text editor remains runnable and binary file is never put into executable source.
+    p.locator('#file-tree .file-entry[title="main.js"]').click()
+    verify(p.locator('#code-editor').is_editable(),'Q25 binary roundtrip broke text editor')
+
 def check_data(p):
     screen(p,'datalab')
     p.locator('#data-input').fill('title,value\nOne,10\nMissing,\nTwo,20')
@@ -662,6 +689,7 @@ def check_local_connection_diagnostics_and_manual_retry(p):
 CASES=[
  ('12-screen navigation and command palette',check_navigation),
  ('Workspace projects, files, runner, snapshots, JSON ZIP and import/export',check_workspace),
+ ('Q25 bounded local image/audio and byte-exact JSON ZIP roundtrip',check_q25_binary_project_assets),
  ('P13 nested explorer and collision-safe folder relocation',check_folder_management),
  ('P23 snapshot compare, pin, rename, export and safe deletion',check_snapshot_management),
  ('Isolated HTML preview tabs',check_html_preview),
