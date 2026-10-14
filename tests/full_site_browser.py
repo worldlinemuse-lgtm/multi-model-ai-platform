@@ -50,6 +50,22 @@ def check_navigation(p):
     verify(p.locator('#command-dialog').is_visible(),'Ctrl+K failed')
     p.keyboard.press('Escape')
     verify(not p.locator('#command-dialog').is_visible(),'Escape palette failed')
+def check_q28_github_review_proposal(p):
+    screen(p,'workspace')
+    p.locator('#github-proposal-repo').fill('https://github.com/worldlinemuse-lgtm/multi-model-ai-platform')
+    p.locator('#github-proposal-export').click()
+    verify('Export blocked:' in p.locator('#github-proposal-status').inner_text(),'Q28 must reject GitHub URLs in place of strict repo slug')
+    p.locator('#github-proposal-repo').fill('worldlinemuse-lgtm/multi-model-ai-platform')
+    p.locator('#code-editor').fill('console.log("Q28 LOCAL-ONLY PROPOSAL");')
+    approve(p)
+    with p.expect_download() as exported:p.locator('#github-proposal-export').click()
+    proposal=json.loads(Path(exported.value.path()).read_text())
+    verify(proposal['format']=='mm-studio-github-proposal-v1','Q28 proposal version absent')
+    verify(proposal['destination']['path']=='main.js','Q28 selected path incorrect')
+    verify('Q28 LOCAL-ONLY PROPOSAL' in proposal['proposedContent'],'Q28 exported text differs')
+    verify(proposal['remoteStateVerified'] is False and proposal['writePerformed'] is False and proposal['approvalGranted'] is False,'Q28 falsely claims GitHub remote action')
+    verify('NO remote GitHub changes made' in p.locator('#github-proposal-status').inner_text(),'Q28 UI must disclose dry-run-only status')
+
 def check_workspace(p):
     screen(p,'workspace')
     verify(p.locator('#code-editor').is_editable(),'Code editor is not editable')
@@ -718,6 +734,7 @@ def check_local_connection_diagnostics_and_manual_retry(p):
 CASES=[
  ('12-screen navigation and command palette',check_navigation),
  ('Workspace projects, files, runner, snapshots, JSON ZIP and import/export',check_workspace),
+ ('Q28 local GitHub proposal only, no repo writes or auth',check_q28_github_review_proposal),
  ('Q25 bounded local image/audio and byte-exact JSON ZIP roundtrip',check_q25_binary_project_assets),
  ('P13 nested explorer and collision-safe folder relocation',check_folder_management),
  ('P23 snapshot compare, pin, rename, export and safe deletion',check_snapshot_management),
