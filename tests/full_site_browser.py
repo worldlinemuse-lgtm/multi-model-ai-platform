@@ -581,6 +581,33 @@ def check_mobile(p):
     p.locator('#sidebar-close').click()
     verify(not p.locator('#sidebar').evaluate("(x)=>x.classList.contains('open')"),'Mobile sidebar close failed')
 
+def check_vault_portability(p):
+    setup_vault(p)
+    screen(p,'vault')
+    with p.expect_download() as downloaded:p.locator('#vault-export-encrypted').click()
+    backup=Path(downloaded.value.path()).read_text()
+    verify('"format": "mm-studio-encrypted-vault-v1"' in backup,'Q21 encrypted backup format missing')
+    verify('TEST-FAKE-NOT-A-REAL-API-KEY' not in backup,'Q21 backup leaked plaintext key')
+    p.locator('#vault-rotation-old').fill('test-only-vault-passphrase-2026')
+    p.locator('#vault-rotation-new').fill('new-vault-passphrase-QA-2026')
+    approve(p)
+    p.locator('#vault-rotate-submit').click()
+    p.wait_for_function("document.querySelector('#toast').textContent.includes('Vault re-encrypted')",timeout=20000)
+    p.locator('#vault-lock').click()
+    p.locator('#vault-password').fill('test-only-vault-passphrase-2026')
+    p.locator('#vault-submit').click()
+    p.wait_for_function("document.querySelector('#toast').textContent.includes('incorrect')",timeout=16000)
+    p.locator('#vault-password').fill('new-vault-passphrase-QA-2026')
+    p.locator('#vault-submit').click()
+    p.wait_for_function("document.querySelector('#vault-status').textContent === 'UNLOCKED'",timeout=16000)
+    approve(p)
+    p.locator('#vault-import-encrypted').set_input_files({'name':'encrypted-vault.json','mimeType':'application/json','buffer':backup.encode()})
+    p.wait_for_function("document.querySelector('#vault-status').textContent === 'LOCKED'",timeout=16000)
+    p.locator('#vault-password').fill('test-only-vault-passphrase-2026')
+    p.locator('#vault-submit').click()
+    p.wait_for_function("document.querySelector('#vault-status').textContent === 'UNLOCKED'",timeout=16000)
+    verify('GroqCloud' in p.locator('#vault-items').inner_text(),'Q21 imported encrypted vault credentials unavailable after old passphrase')
+
 CASES=[
  ('12-screen navigation and command palette',check_navigation),
  ('Workspace projects, files, runner, snapshots, JSON ZIP and import/export',check_workspace),
@@ -590,6 +617,7 @@ CASES=[
  ('P04 linked local CSS and classic scripts in original order',check_linked_preview),
  ('Eight provider directory records and setup navigation',check_providers),
  ('Vault locked typing, encryption, persistence, wrong password, removal and wipe',check_vault),
+ ('Q21 encrypted vault export/import and passphrase rotation',check_vault_portability),
  ('Mocked API adapter through chat, history, audit and export',check_chat),
  ('P14 local conversation search edit export delete',check_chat_management),
  ('Mocked three-stage workflow and stage cap',check_workflows),
