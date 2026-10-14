@@ -66,3 +66,32 @@ export function serializeDataset(parsed){
  // JSON retains numeric and quoted-string distinctions (CSV rewriting would not).
  return JSON.stringify(parsed.records,null,2);
 }
+
+/* Bounded browser-local grouped numeric statistics. No remote APIs. */
+export function groupNumericStats(parsed,{groupColumn,valueColumn,missingPolicy='skip'}={}){
+ if(!parsed||!Array.isArray(parsed.columns)||!Array.isArray(parsed.records)||parsed.records.length>3000)throw Error('Analyze a bounded dataset first.');
+ if(!parsed.columns.includes(groupColumn)||!parsed.columns.includes(valueColumn)||groupColumn===valueColumn)throw Error('Choose distinct group and numeric columns.');
+ if(!['skip','zero'].includes(missingPolicy))throw Error('Invalid missing-value policy.');
+ const map=new Map();
+ for(const row of parsed.records){
+  const rawKey=row?.[groupColumn];
+  if(rawKey!==null&&rawKey!==undefined&&typeof rawKey==='object')throw Error('Complex grouping keys are not supported.');
+  const key=rawKey===null||rawKey===undefined||String(rawKey).trim()===''?'(missing)':String(rawKey);
+  if(key.length>500)throw Error('Group key exceeds 500 characters.');
+  if(!map.has(key)){
+   if(map.size>=50)throw Error('Maximum 50 distinct groups.');
+   map.set(key,{label:key,count:0,observed:0,sum:0,min:null,max:null});
+  }
+  const item=map.get(key);item.count++;
+  const raw=row?.[valueColumn];
+  const numeric=raw===null||raw===undefined||typeof raw==='boolean'||typeof raw==='object'||String(raw).trim()===''?null:Number(raw);
+  let amount=Number.isFinite(numeric)?numeric:null;
+  if(amount===null&&missingPolicy==='zero')amount=0;
+  if(amount===null)continue;
+  item.observed++;item.sum+=amount;
+  if(!Number.isFinite(item.sum))throw Error('Grouped sum exceeds numeric range.');
+  item.min=item.min===null?amount:Math.min(item.min,amount);
+  item.max=item.max===null?amount:Math.max(item.max,amount);
+ }
+ return [...map.values()].map(({label,count,observed,sum,min,max})=>({label,count,observed,missing:count-observed,total:sum,mean:observed?sum/observed:null,min,max}));
+}
