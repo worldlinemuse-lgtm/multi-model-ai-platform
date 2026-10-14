@@ -1,7 +1,7 @@
 // Network-first for live source changes; cached application shell supports offline use.
 // The cache is scoped to this project site, not other sites on the same github.io origin.
-const CACHE_PREFIX='mm-studio-shell-';
-const CACHE='mm-studio-shell-b03-29';
+const CACHE_PREFIX='mm-studio-shell-'+encodeURIComponent(new URL(self.registration.scope).pathname)+'-';
+const CACHE=CACHE_PREFIX+'b03-29';
 const SHELL=['./','./index.html','./styles.css','./favicon.svg','./provider-guides.js','./src/main.js','./src/core.js','./src/storage.js','./src/vault.js','./src/provider-api.js','./src/request-trace.js','./src/sandbox.js','./src/zip.js','./src/labs.js','./src/speech-settings.js','./src/image-transform.js','./src/data-tools.js','./src/project-files.js','./src/preview-assets.js','./src/module-graph.js','./src/module-linker.js','./src/module-runtime.js','./src/note-tools.js','./src/snapshot-diff.js','./src/capability-probes.js','./src/knowledge.js','./src/wasm-policy.js','./src/wasm-runner.js','./src/wasm-worker.js','./src/wasm-ui.js','./src/expression-repl.js','./src/expression-repl-worker.js','./src/expression-repl-ui.js','./src/workflow-plan.js','./src/workflow-supervisor.js','./src/local-evidence.js','./src/knowledge-pages.js','./src/binary-assets.js','./src/provider-presets.js','./src/ondevice-readiness.js','./src/model-request-settings.js','./src/connection-diagnostics.js','./src/review-edits.js','./src/docx-text.js','./src/knowledge-documents.js'];
 const REFRESH_SLOTS=Object.freeze([CACHE+'-refresh-a',CACHE+'-refresh-b']);
 const CONTROL_CACHE=CACHE+'-control';

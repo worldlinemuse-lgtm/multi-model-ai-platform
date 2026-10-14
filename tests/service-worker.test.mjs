@@ -5,7 +5,8 @@ import vm from 'node:vm';
 
 const source=readFileSync(new URL('../sw.js',import.meta.url),'utf8');
 const base='https://example.github.io/multi-model-ai-platform/';
-const BASE_CACHE='mm-studio-shell-b03-29';
+const CACHE_PREFIX='mm-studio-shell-'+encodeURIComponent(new URL(base).pathname)+'-';
+const BASE_CACHE=CACHE_PREFIX+'b03-29';
 function harness({online=true,existingCaches=[],failRefresh=false,failControl=false}={}){
  const callbacks={},deleted=[],stores=new Map(existingCaches.map(name=>[name,new Map()]));
  const net={online},failures={refresh:failRefresh,control:failControl};
@@ -121,7 +122,7 @@ test('Q23: offline after failed first refresh falls back to original base shell'
 });
 test('Q23: activation preserves active version slots, control and unrelated cache but deletes superseded shells',async()=>{
  const keep=[BASE_CACHE,BASE_CACHE+'-refresh-a',BASE_CACHE+'-refresh-b',BASE_CACHE+'-control','other-app-cache'];
- const old=['mm-studio-shell-b03-19','mm-studio-shell-b03-20','mm-studio-shell-b03-21','mm-studio-shell-b03-22','mm-studio-shell-b03-23','mm-studio-shell-b03-24','mm-studio-shell-b03-25','mm-studio-shell-b03-26','mm-studio-shell-b03-27','mm-studio-shell-b03-28'];
+ const old=['b03-19','b03-20','b03-21','b03-22','b03-23','b03-24','b03-25','b03-26','b03-27','b03-28'].map(v=>CACHE_PREFIX+v);
  const h=harness({existingCaches:[...keep,...old]});await h.activate();
  assert.deepEqual(h.deleted,old);
  for(const n of keep)assert.ok(h.stores.has(n));
@@ -130,6 +131,20 @@ test('Q23: failed install cleans candidate and preserves previous version shell'
  const h=harness({failRefresh:false,existingCaches:['mm-studio-shell-b03-24']});
  // The initial install uses the active version; use successful install to verify scoped cache.
  await h.install();assert.ok(h.stores.has(BASE_CACHE));assert.ok(h.stores.has('mm-studio-shell-b03-24'));
+});
+
+test('V6.0: activation does not delete foreign Pages scoped caches or ambiguous old cache names',async()=>{
+ const foreign='mm-studio-shell-'+encodeURIComponent('/other-project/')+'-b03-29';
+ const ambiguous='mm-studio-shell-b03-28';
+ const obsolete=CACHE_PREFIX+'b03-18';
+ const h=harness({existingCaches:[BASE_CACHE,foreign,ambiguous,obsolete]});
+ await h.activate();
+ assert.deepEqual(h.deleted,[obsolete]);
+ for(const name of [BASE_CACHE,foreign,ambiguous])assert.ok(h.stores.has(name),'foreign or ambiguous cache deleted: '+name);
+});
+test('V6.0: registration path participates in offline cache namespace',()=>{
+ assert.ok(BASE_CACHE.startsWith('mm-studio-shell-'+encodeURIComponent('/multi-model-ai-platform/')+'-'));
+ assert.ok(!BASE_CACHE.startsWith('mm-studio-shell-'+encodeURIComponent('/other-project/')+'-'));
 });
 test('Q03: all directly imported main modules are in the offline shell',()=>{
  const main=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
