@@ -11,7 +11,8 @@ window.MM_PROVIDER_GUIDES = Object.freeze([
       "Stay on the Free plan. Do not upgrade to Developer.",
       "Open API Keys, choose the intended project, create a new key, and copy it securely.",
       "Check your current Free limits in the console; they are shared within the applicable project/organization.",
-      "Return to the platform and use the secure key-connection workflow once available."
+      "Select an eligible active model such as openai/gpt-oss-20b after checking your account's Free limits. Llama 3.1 8B and Llama 3.3 70B were retired for Free and Developer tiers on Aug 16, 2026.",
+      "Return to the platform and save the key into the encrypted vault; the opt-in metadata diagnostic verifies model listing but not chat inference."
     ],
     "signup_url": "https://console.groq.com/",
     "key_url": "https://console.groq.com/keys",

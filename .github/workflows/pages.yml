@@ -45,6 +45,7 @@ jobs:
           python -u tests/startup_integrity_browser.py --base-url http://127.0.0.1:8000
           python -u tests/browser_regression.py --base-url http://127.0.0.1:8000
           python -u tests/full_site_browser.py --base-url http://127.0.0.1:8000
+          python -u tests/groq_connection_browser.py --base-url http://127.0.0.1:8000
           python -u tests/offline_acceptance.py --base-url http://127.0.0.1:8000
           python -u tests/q23_multitab_browser.py --base-url http://127.0.0.1:8000
           python -u tests/python_acceptance.py --base-url http://127.0.0.1:8000
@@ -95,6 +96,7 @@ jobs:
           python -u tests/startup_integrity_browser.py --base-url "$DEPLOYED_URL"
           python -u tests/browser_regression.py --base-url "$DEPLOYED_URL"
           python -u tests/full_site_browser.py --base-url "$DEPLOYED_URL"
+          python -u tests/groq_connection_browser.py --base-url "$DEPLOYED_URL"
           python -u tests/offline_acceptance.py --base-url "$DEPLOYED_URL"
           python -u tests/q23_multitab_browser.py --base-url "$DEPLOYED_URL"
           python -u tests/python_acceptance.py --base-url "$DEPLOYED_URL"

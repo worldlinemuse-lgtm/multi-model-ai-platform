@@ -8,7 +8,7 @@ export const MAX_PROJECT_BYTES = 1250000;
 export const MAX_NOTES = 250;
 export const MAX_AUDIT = 500;
 export const PROVIDERS = Object.freeze([
-  {id:'groq', name:'GroqCloud',model:'llama-3.3-70b-versatile',window:'Minute / day',transport:'OpenAI-compatible',kind:'key'},
+  {id:'groq', name:'GroqCloud',model:'openai/gpt-oss-20b',window:'Minute / day',transport:'OpenAI-compatible',kind:'key'},
   {id:'openrouter',name:'OpenRouter Free',model:'openrouter/free',window:'Minute / day',transport:'OpenAI-compatible',kind:'key'},
   {id:'gemini',name:'Google Gemini API',model:'gemini-2.5-flash-lite',window:'Minute / day',transport:'Gemini REST',kind:'key'},
   {id:'cloudflare',name:'Cloudflare Workers AI',model:'@cf/meta/llama-3.1-8b-instruct-fp8',window:'Daily',transport:'Workers AI REST',kind:'key+account'},
