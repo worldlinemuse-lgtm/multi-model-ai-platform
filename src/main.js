@@ -9,6 +9,7 @@ import {projectFolders,projectTreeEntries,moveProjectFolder} from './project-fil
 import {parseNoteArchive,exportNoteArchive} from './knowledge.js';
 import {readBrowserCapabilities} from './capability-probes.js';
 import {editLocalNote,findExactNoteDuplicates} from './note-tools.js';
+import {compareProjectFiles} from './snapshot-diff.js';
 
 const el=id=>document.getElementById(id);
 const qs=s=>document.querySelector(s);
@@ -66,9 +67,10 @@ function manageSnapshot(){
  if(action==='export'){const payload={format:'mm-platform-snapshot-v1',name:snap.project.name,active:snap.project.active,files:snap.project.files,snapshot:{label:snap.label,at:snap.at}};download('snapshot-'+snap.label.replace(/[^a-z0-9_-]/gi,'_')+'.json',JSON.stringify(payload,null,2),'application/json');toast('Snapshot exported as an importable project.');return;}
  if(action==='pin'){snap.pinned=!snap.pinned;renderProjectSelector();saveSoon();toast(snap.pinned?'Snapshot protected from automatic eviction.':'Snapshot unpinned.');return;}
  if(action==='delete'){if(!confirm('Permanently delete snapshot "'+snap.label+'"? This does not delete your current project.'))return;state.snapshots=state.snapshots.filter(s=>s.id!==snap.id);$('snapshot-select').value='';renderProjectSelector();$('snapshot-comparison').hidden=true;saveSoon();toast('Snapshot deleted.');return;}
- if(action==='compare'){const current=project().files,old=snap.project.files,names=[...new Set([...Object.keys(old),...Object.keys(current)])].sort(),added=[],removed=[],changed=[],identical=[];for(const name of names){if(!Object.hasOwn(old,name))added.push(name);else if(!Object.hasOwn(current,name))removed.push(name);else if(old[name]!==current[name])changed.push(name);else identical.push(name);}
- const section=(heading,items)=>heading+' ('+items.length+')'+(items.length?'\n  '+items.join('\n  '):'');
- $('snapshot-comparison').textContent=['Comparison with snapshot: '+snap.label,section('Added since snapshot',added),section('Removed since snapshot',removed),section('Modified since snapshot',changed),section('Unchanged',identical)].join('\n\n');$('snapshot-comparison').hidden=false;toast('Snapshot comparison ready.');}
+ if(action==='compare'){
+ const report=compareProjectFiles(snap.project.files,project().files);
+ $('snapshot-comparison').textContent='Comparison with snapshot: '+snap.label+'\n\n'+report.summary+'\n\n'+report.details;
+ $('snapshot-comparison').hidden=false;toast('Snapshot comparison ready (read-only).');}
 }
 function restoreSnapshot(){const s=state.snapshots.find(x=>x.id===$('snapshot-select').value);if(!s)return toast('Select a snapshot first.',true);if(!confirm('Replace your current project files with this snapshot?'))return;const idx=state.projects.findIndex(p=>p.id===state.activeProjectId);state.projects[idx]=clone(s.project);renderFiles();saveSoon();toast('Snapshot restored.');}
 function download(name,data,type='application/json'){const blob=data instanceof Blob?data:new Blob([data],{type});const url=URL.createObjectURL(blob);const a=make('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);}
