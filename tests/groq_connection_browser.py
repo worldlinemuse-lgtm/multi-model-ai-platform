@@ -14,7 +14,7 @@ def run(base):
             headers={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Authorization, Content-Type, Accept','Access-Control-Allow-Methods':'GET,OPTIONS'}
             if method=='OPTIONS':route.fulfill(status=204,headers=headers)
             elif method=='GET' and url=='https://api.groq.com/openai/v1/models':
-                route.fulfill(status=200,headers={**headers,'Content-Type':'application/json'},body=json.dumps({'object':'list','data':[{'id':'llama-3.3-70b-versatile','active':True},{'id':'llama-3.1-8b-instant','active':True}]}))
+                route.fulfill(status=200,headers={**headers,'Content-Type':'application/json'},body=json.dumps({'object':'list','data':[{'id':'openai/gpt-oss-20b','active':True},{'id':'openai/gpt-oss-120b','active':True}]}))
             else:raise AssertionError('Unexpected metadata diagnostic request '+method+' '+url)
         page.route('https://api.groq.com/**',intercept)
         page.goto(base,wait_until='domcontentloaded',timeout=45000)
@@ -28,7 +28,7 @@ def run(base):
         page.locator('#vault-submit').click()
         page.wait_for_function("document.querySelector('#vault-status').textContent.includes('UNLOCKED')",timeout=15000)
         page.locator('#key-provider').select_option('groq')
-        page.locator('#key-model').fill('llama-3.3-70b-versatile')
+        page.locator('#key-model').fill('openai/gpt-oss-20b')
         page.locator('#key-value').fill('SYNTHETIC-MOCK-ONLY-NOT-A-REAL-KEY')
         page.locator('#key-attest').check()
         page.locator('#save-key').click()
