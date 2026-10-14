@@ -600,6 +600,7 @@ def check_vault_portability(p):
     p.locator('#vault-password').fill('new-vault-passphrase-QA-2026')
     p.locator('#vault-submit').click()
     p.wait_for_function("document.querySelector('#vault-status').textContent === 'UNLOCKED'",timeout=16000)
+    p.locator('#vault-import-passphrase').fill('test-only-vault-passphrase-2026')
     approve(p)
     p.locator('#vault-import-encrypted').set_input_files({'name':'encrypted-vault.json','mimeType':'application/json','buffer':backup.encode()})
     p.wait_for_function("document.querySelector('#vault-status').textContent === 'LOCKED'",timeout=16000)

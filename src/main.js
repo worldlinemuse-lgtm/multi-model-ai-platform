@@ -154,12 +154,14 @@ async function exportEncryptedVaultUI(){
 }
 async function importEncryptedVaultUI(event){
  const input=event.target,file=input.files?.[0];input.value='';
+ const passwordBox=$('vault-import-passphrase'),passphrase=passwordBox.value;passwordBox.value='';
  if(!file)return;
+ if(!passphrase||passphrase.length<10)return toast('Enter the ORIGINAL encrypted backup passphrase before selecting the file.',true);
  if(file.size>1000000)return toast('Encrypted vault backup exceeds 1 MB.',true);
  const exists=await vault.exists();
  if(exists&&!confirm('Replace the EXISTING encrypted key vault on this device? Export its encrypted backup first. Importing a different vault will require that backup’s original passphrase and cannot be undone here.'))return;
  try{
-  await vault.importEncrypted(await file.text(),{replaceExisting:exists});
+  await vault.importEncrypted(await file.text(),{replaceExisting:exists,passphrase});
   $('vault-password').value='';renderAll();
   toast('Encrypted vault imported and locked. Unlock it with its original passphrase.');
  }catch(e){toast('Vault import rejected: '+errorText(e),true);}
