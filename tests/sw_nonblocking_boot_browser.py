@@ -11,7 +11,7 @@ def main(base):
   page=context.new_page()
   errors=[]
   page.on('pageerror',lambda e:errors.append(str(e)))
-  page.add_init_script("""() => {
+  page.add_init_script("""(() => {
     window.__registrationProbeCount = 0;
     if ('serviceWorker' in navigator) {
       Object.defineProperty(navigator.serviceWorker,'register',{
@@ -19,7 +19,7 @@ def main(base):
         value:()=>{window.__registrationProbeCount++;return new Promise(()=>{});}
       });
     }
-  }""")
+  })();""")
   page.goto(base,wait_until='domcontentloaded',timeout=30000)
   page.wait_for_function("document.documentElement.dataset.mmBoot==='ready'",timeout=12000)
   assert page.evaluate('window.__registrationProbeCount')==1,'Service worker registration was not attempted exactly once'
