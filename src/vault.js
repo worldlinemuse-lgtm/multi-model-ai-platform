@@ -33,13 +33,22 @@ export class KeyVault{
   validateEncryptedRecord(record);
   return JSON.stringify({format:'mm-studio-encrypted-vault-v1',record},null,2);
  }
- async importEncrypted(contents,{replaceExisting=false}={}){
+ async importEncrypted(contents,{replaceExisting=false,passphrase}={}){
   if(typeof contents!=='string'||contents.length>MAX_ENCRYPTED_RECORD)throw Error('Encrypted vault backup must be JSON under 1 MB.');
+  if(typeof passphrase!=='string'||passphrase.length<10||passphrase.length>1024)throw Error('Enter the original encrypted backup passphrase before importing.');
   let backup;try{backup=JSON.parse(contents);}catch{throw Error('Encrypted vault backup is invalid JSON.');}
   if(!backup||backup.format!=='mm-studio-encrypted-vault-v1')throw Error('Encrypted vault backup format is unsupported.');
   const record=validateEncryptedRecord(backup.record);
   if(await this.exists()&&!replaceExisting)throw Error('An encrypted vault already exists; explicit replacement confirmation is required.');
-  await write(KEY,record);this.lock();
+  const tempKey=await this.derive(passphrase,fromB64(record.salt));
+  let plaintext;
+  try{plaintext=await crypto.subtle.decrypt({name:'AES-GCM',iv:fromB64(record.iv),additionalData:te.encode(KEY)},tempKey,fromB64(record.ciphertext));}
+  catch{throw Error('Encrypted backup passphrase is incorrect or backup authentication failed. Existing vault unchanged.');}
+  let entries;
+  try{entries=JSON.parse(td.decode(plaintext));}catch{throw Error('Encrypted backup payload is not valid JSON. Existing vault unchanged.');}
+  if(!entries||typeof entries!=='object'||Array.isArray(entries)||Object.keys(entries).length>32||!Object.entries(entries).every(([id,c])=>/^[a-z0-9_-]{1,50}$/.test(id)&&c&&typeof c==='object'&&!Array.isArray(c)&&typeof c.key==='string'&&c.key.length>0&&c.key.length<=10000&&typeof c.model==='string'&&c.model.length>0&&c.model.length<=130&&typeof c.account==='string'&&c.account.length<=120&&c.attested===true&&typeof c.updated==='string'&&c.updated.length<=80))throw Error('Authenticated encrypted backup contains invalid provider entries. Existing vault unchanged.');
+  await write(KEY,record);
+  this.lock();
  }
  async rotatePassphrase(currentPass,newPass){
   if(!this.isUnlocked)throw Error('Unlock vault before rotating the passphrase.');
