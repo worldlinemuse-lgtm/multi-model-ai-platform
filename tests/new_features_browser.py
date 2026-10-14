@@ -64,6 +64,18 @@ def check(page):
     page.locator('#data-group-run').click()
     expect(page.locator('#data-group-output')).to_contain_text('Alpha: 1/2 observed',timeout=10000)
     print("PASS: Q15 grouped numeric summary with missing-value handling",flush=True)
+    page.locator('#repl-expression').fill('let x = 2 + 3')
+    page.locator('#repl-execute').click()
+    expect(page.locator('#repl-output')).to_contain_text('= 5',timeout=12000)
+    page.locator('#repl-expression').fill('x * 2')
+    page.locator('#repl-execute').click()
+    expect(page.locator('#repl-output')).to_contain_text('= 10',timeout=12000)
+    page.locator('#repl-reset').click()
+    page.locator('#repl-expression').fill('x')
+    page.locator('#repl-execute').click()
+    expect(page.locator('#repl-output')).to_contain_text('Unknown variable: x',timeout=12000)
+    print("PASS: Q16 bounded persistent expression console",flush=True)
+
 
 
 
