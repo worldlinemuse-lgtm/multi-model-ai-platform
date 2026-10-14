@@ -1,0 +1,7 @@
+# Q25 — bounded browser-only binary asset records (scope 1)
+
+Use an explicit MIME allowlist derived from WHATWG MIME Sniffing signatures: PNG/JPEG/WebP images and WAV/MP3 audio. Treat user-provided content type as untrusted; magic bytes must match extension, with full browser decoding still contingent on valid media. Exclude SVG, PDF, HTML, executable scripts and other active content. Limit each asset to 400 KB, at most 8 assets and 1.25 MB per project, retaining local-only IndexedDB persistence using canonical base64 records validated during state import/export. Preview only with native image/audio elements and revocable object URLs. Never execute these resources as HTML/JS. ZIP reader/writer preserve binary bytes as raw Uint8Array entries with CRC32 and bounded inflation. Validate file path, MIME, byte length, canonical base64, and per-project collision with text file keys. No remote upload.
+
+Research: WHATWG MIME sniffing standard (updated 2026-07-17) https://mimesniff.spec.whatwg.org/ ; MDN blob URL lifecycle https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Schemes/blob ; PKWARE ZIP format via Library of Congress https://www.loc.gov/preservation/digital/formats/fdd/fdd000354.shtml . These are primary standards, not pasted code.
+
+Status: staged pure module/tests. Full UI, JSON/ZIP export-import, browser acceptance and hosted SHA still required; do not mark complete at this stage.
