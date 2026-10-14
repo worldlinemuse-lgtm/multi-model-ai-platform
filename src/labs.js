@@ -1,4 +1,5 @@
 import {imageGeometry,paintEditedImage} from './image-transform.js';
+import {validateSpeechSettings,chooseVoice} from './speech-settings.js';
 import {MAX_SAVED_DATASETS,MAX_SAVED_DATASET_CHARS,validateSavedDatasets,transformDataset,serializeDataset} from './data-tools.js';
 export function parseCSV(text){const rows=[];let row=[],value='',quoted=false;for(let i=0;i<text.length;i++){const c=text[i];if(quoted){if(c==='"'&&text[i+1]==='"'){value+='"';i++;}else if(c==='"')quoted=false;else value+=c;}else if(c==='"')quoted=true;else if(c===','){row.push(value);value='';}else if(c==='\n'){row.push(value.replace(/\r$/,''));if(row.some(x=>x.trim()))rows.push(row);row=[];value='';}else value+=c;}if(quoted)throw Error('Unclosed quoted CSV field');row.push(value.replace(/\r$/,''));if(row.some(x=>x.trim()))rows.push(row);if(!rows.length)throw Error('Empty dataset');const columns=rows.shift().map((x,i)=>x||`Column ${i+1}`);if(columns.length>50||rows.length>3000)throw Error('Limit: 50 columns, 3,000 rows');return {columns,records:rows.map(r=>Object.fromEntries(columns.map((col,i)=>[col,r[i]??''])))};}
 export function parseDataset(text){if(!text||text.length>2_000_000)throw Error('Dataset must be under 2 MB');const t=text.trim();if(t.startsWith('[')||t.startsWith('{')){const v=JSON.parse(t);const arr=Array.isArray(v)?v:Array.isArray(v.data)?v.data:[v];if(arr.length>3000)throw Error('Maximum 3,000 JSON rows');const records=arr.map(x=>typeof x==='object'&&x!==null&&!Array.isArray(x)?x:{value:x});const columns=Array.from(new Set(records.flatMap(x=>Object.keys(x)))).slice(0,50);return {columns,records};}return parseCSV(t);}
@@ -142,7 +143,38 @@ export function setupLabs({el,toast,download,getDatasets=()=>[],commitDatasets=a
   }
   output.toBlob(blob=>{if(blob)download('edited-image.png',blob,'image/png');else toast('Image export failed: try preview-size export.',true);},'image/png');
  });
- $('speech-start').addEventListener('click',()=>{const text=$('speech-text').value.trim();if(!text)return;if(!('speechSynthesis' in window))return toast('Speech synthesis unavailable in this browser.',true);speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text.slice(0,2000));utterance.rate=1;utterance.pitch=1;utterance.onend=()=>$('speech-status').textContent='Finished speaking.';speechSynthesis.speak(utterance);$('speech-status').textContent='Speaking through browser voices…';});$('speech-stop').addEventListener('click',()=>{if('speechSynthesis' in window)speechSynthesis.cancel();if(activeRecognition){const instance=activeRecognition;activeRecognition=null;try{instance.stop();}catch(error){console.warn('Unable to stop recognition:',error);}}$('speech-status').textContent='Speech and dictation stopped.';});$('speech-dictate').addEventListener('click',()=>{
+ const voices=$('speech-voice'),rate=$('speech-rate'),pitch=$('speech-pitch');
+ function labelSpeech(){$('speech-rate-label').textContent='Speed '+Number(rate.value).toFixed(1)+'×';$('speech-pitch-label').textContent='Pitch '+Number(pitch.value).toFixed(1);}
+ function refreshVoices(){
+  const keep=voices.value;voices.replaceChildren(new Option('Browser default',''));
+  if(!('speechSynthesis' in window)){$('speech-voices-status').textContent='Speech synthesis unavailable.';return;}
+  const list=speechSynthesis.getVoices();
+  for(const v of list)voices.add(new Option(v.name+' ('+v.lang+')',v.voiceURI));
+  if([...voices.options].some(o=>o.value===keep))voices.value=keep;
+  $('speech-voices-status').textContent=list.length+' browser-reported voice(s). Availability and privacy depend on your browser.';
+ }
+ labelSpeech();refreshVoices();
+ if('speechSynthesis' in window)speechSynthesis.addEventListener?.('voiceschanged',refreshVoices);
+ rate.addEventListener('input',labelSpeech);pitch.addEventListener('input',labelSpeech);
+ $('speech-refresh-voices').addEventListener('click',refreshVoices);
+ $('speech-start').addEventListener('click',()=>{
+  const text=$('speech-text').value.trim();if(!text)return toast('Enter text to speak.',true);
+  if(!('speechSynthesis' in window)||typeof SpeechSynthesisUtterance!=='function')return toast('Speech synthesis unavailable in this browser.',true);
+  let options;try{options=validateSpeechSettings({rate:rate.value,pitch:pitch.value,voiceURI:voices.value});}catch(error){return toast(error.message,true);}
+  const chosen=options.voiceURI?chooseVoice(speechSynthesis.getVoices(),options.voiceURI):null;
+  if(options.voiceURI&&!chosen)return toast('Selected browser voice is no longer available.',true);
+  speechSynthesis.cancel();
+  const utterance=new SpeechSynthesisUtterance(text.slice(0,2000));utterance.rate=options.rate;utterance.pitch=options.pitch;if(chosen)utterance.voice=chosen;
+  utterance.onend=()=>$('speech-status').textContent='Finished speaking.';
+  utterance.onerror=e=>$('speech-status').textContent='Speech error: '+String(e.error||'unknown');
+  speechSynthesis.speak(utterance);$('speech-status').textContent='Speaking through '+(chosen?.name||'browser default voice')+'…';
+ });
+ $('speech-stop').addEventListener('click',()=>{
+  if('speechSynthesis' in window)speechSynthesis.cancel();
+  if(activeRecognition){const instance=activeRecognition;activeRecognition=null;try{instance.stop();}catch(error){console.warn('Unable to stop recognition:',error);}}
+  $('speech-status').textContent='Speech and dictation stopped.';
+ });
+ $('speech-dictate').addEventListener('click',()=>{
  if(activeRecognition)return toast('Dictation is already active; use Stop speech / dictation.',true);
  const SpeechRec=window.SpeechRecognition||window.webkitSpeechRecognition;
  if(!SpeechRec)return toast('Dictation not available in this browser.',true);
