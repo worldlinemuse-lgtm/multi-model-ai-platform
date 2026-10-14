@@ -37,4 +37,4 @@ if(id==='gemini'){text=(payload.candidates||[]).flatMap(c=>(c.content?.parts||[]
 else if(id==='cloudflare'){const output=payload.result?.response||payload.result?.output||payload.result;text=typeof output==='string'?output:Array.isArray(output)?output.map(x=>x.text||x.content||'').join('\n'):JSON.stringify(output??'');}
 else text=payload.choices?.[0]?.message?.content||payload.output_text||'';
 if(Array.isArray(text))text=text.map(p=>p.text||'').join('\n');if(!text)throw Error(`${id}: API returned no text; check model compatibility and response format.`);
-return {text:String(text).slice(0,60000),usage:parseReportedUsage(usage),model:payload.model||credential.model,id};}
+return {text:String(text).slice(0,60000),usage:parseReportedUsage(usage),model:payload.model||credential.model,id,httpStatus:response.status};}
