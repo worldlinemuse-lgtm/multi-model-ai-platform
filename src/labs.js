@@ -1,3 +1,4 @@
+import {imageGeometry,paintEditedImage} from './image-transform.js';
 import {MAX_SAVED_DATASETS,MAX_SAVED_DATASET_CHARS,validateSavedDatasets,transformDataset,serializeDataset} from './data-tools.js';
 export function parseCSV(text){const rows=[];let row=[],value='',quoted=false;for(let i=0;i<text.length;i++){const c=text[i];if(quoted){if(c==='"'&&text[i+1]==='"'){value+='"';i++;}else if(c==='"')quoted=false;else value+=c;}else if(c==='"')quoted=true;else if(c===','){row.push(value);value='';}else if(c==='\n'){row.push(value.replace(/\r$/,''));if(row.some(x=>x.trim()))rows.push(row);row=[];value='';}else value+=c;}if(quoted)throw Error('Unclosed quoted CSV field');row.push(value.replace(/\r$/,''));if(row.some(x=>x.trim()))rows.push(row);if(!rows.length)throw Error('Empty dataset');const columns=rows.shift().map((x,i)=>x||`Column ${i+1}`);if(columns.length>50||rows.length>3000)throw Error('Limit: 50 columns, 3,000 rows');return {columns,records:rows.map(r=>Object.fromEntries(columns.map((col,i)=>[col,r[i]??''])))};}
 export function parseDataset(text){if(!text||text.length>2_000_000)throw Error('Dataset must be under 2 MB');const t=text.trim();if(t.startsWith('[')||t.startsWith('{')){const v=JSON.parse(t);const arr=Array.isArray(v)?v:Array.isArray(v.data)?v.data:[v];if(arr.length>3000)throw Error('Maximum 3,000 JSON rows');const records=arr.map(x=>typeof x==='object'&&x!==null&&!Array.isArray(x)?x:{value:x});const columns=Array.from(new Set(records.flatMap(x=>Object.keys(x)))).slice(0,50);return {columns,records};}return parseCSV(t);}
@@ -10,7 +11,7 @@ export function numericValue(value){
 }
 export function analyzeDataset(parsed){const {columns,records}=parsed;const numeric=columns.filter(col=>records.some(row=>numericValue(row[col])!==null));const stats={};for(const col of numeric){const arr=records.map(row=>numericValue(row[col])).filter(n=>n!==null);if(arr.length)stats[col]={count:arr.length,min:Math.min(...arr),max:Math.max(...arr),mean:arr.reduce((a,b)=>a+b,0)/arr.length};}return {rows:records.length,columns:columns.length,numeric,stats};}
 export function setupLabs({el,toast,download,getDatasets=()=>[],commitDatasets=async()=>{throw Error('Workspace persistence is not configured');}}){
- let parsed=null,selectedImage=null,selectedNote='',activeRecognition=null,tablePage=0,chartPage=0,undoSource=null;const $=el;
+ let parsed=null,selectedImage=null,selectedNote='',activeRecognition=null,tablePage=0,chartPage=0,undoSource=null,rotation=0,cropPercent=0,imageUndo=[];const $=el;
  function refreshSavedDatasets(){
   const selected=$('data-saved').value,items=getDatasets(),control=$('data-saved');
   control.replaceChildren(new Option(items.length?'Choose saved dataset…':'No saved datasets',''));
@@ -86,21 +87,61 @@ export function setupLabs({el,toast,download,getDatasets=()=>[],commitDatasets=a
   $('data-input').value=source;doAnalyze();toast('Last transformation undone.');
  });
  $('data-wasm-test').addEventListener('click',async()=>{try{const bytes=new Uint8Array([0,97,115,109,1,0,0,0,1,7,1,96,2,127,127,1,127,3,2,1,0,7,7,1,3,97,100,100,0,0,10,9,1,7,0,32,0,32,1,106,11]);const instance=await WebAssembly.instantiate(bytes);const sum=instance.instance.exports.add(20,22);$('data-status').textContent=`WebAssembly execution: PASS\n20 + 22 = ${sum}\nNative browser WebAssembly runtime is available.`;toast('WebAssembly test passed.');}catch(e){toast('WebAssembly failed: '+e.message,true)}});
- const canvas=$('media-canvas'),ctx=canvas.getContext('2d');function redrawImage(){if(!selectedImage)return;const w=selectedImage.width,h=selectedImage.height,scale=Math.min(1,1600/w,1600/h);canvas.width=Math.max(1,Math.round(w*scale));canvas.height=Math.max(1,Math.round(h*scale));$('media-resolution-status').textContent=`Preview: ${canvas.width} × ${canvas.height}px · Original: ${w} × ${h}px${scale<1?' (preview reduced to fit)':''}. Choose your export resolution below.`;ctx.clearRect(0,0,canvas.width,canvas.height);ctx.filter=`brightness(${$('media-brightness').value}%) contrast(${$('media-contrast').value}%) saturate(${$('media-saturation').value}%)`;ctx.drawImage(selectedImage,0,0,canvas.width,canvas.height);ctx.filter='none';}
- $('media-image').addEventListener('change',e=>{const f=e.target.files?.[0];e.target.value='';if(!f)return;if(f.size>8_000_000)return toast('Image limit is 8MB.',true);const url=URL.createObjectURL(f),img=new Image();img.onload=()=>{URL.revokeObjectURL(url);selectedImage=img;redrawImage();toast('Image loaded locally.');};img.onerror=()=>{URL.revokeObjectURL(url);toast('Unable to read image.',true)};img.src=url;});for(const id of ['media-brightness','media-contrast','media-saturation'])$(id).addEventListener('input',redrawImage);
- $('media-reset').addEventListener('click',()=>{for(const id of ['media-brightness','media-contrast','media-saturation'])$(id).value=100;redrawImage()});$('media-download').addEventListener('click',()=>{
- if(!selectedImage)return toast('Load an image first.',true);
- let output=canvas;
- if($('media-original-resolution').checked){
-  const {width,height}=selectedImage;
-  if(width*height>32_000_000||width>8192||height>8192)return toast('Image exceeds original-size export safety limit (32 MP / 8192px). Uncheck original resolution to export the preview.',true);
-  output=document.createElement('canvas');output.width=width;output.height=height;
-  const outCtx=output.getContext('2d');if(!outCtx)return toast('Cannot allocate full-resolution export.',true);
-  outCtx.filter=`brightness(${$('media-brightness').value}%) contrast(${$('media-contrast').value}%) saturate(${$('media-saturation').value}%)`;
-  outCtx.drawImage(selectedImage,0,0,width,height);outCtx.filter='none';
+ const canvas=$('media-canvas'),ctx=canvas.getContext('2d');
+ function currentFilter(){return `brightness(${$('media-brightness').value}%) contrast(${$('media-contrast').value}%) saturate(${$('media-saturation').value}%)`;}
+ function editOptions(original=false){return {rotation,cropPercent,original};}
+ function renderImageTo(outCtx,original=false){return paintEditedImage(outCtx,selectedImage,editOptions(original),currentFilter());}
+ function redrawImage(){
+  if(!selectedImage)return;
+  try{
+   const spec=renderImageTo(ctx);
+   $('media-resolution-status').textContent=`Preview: ${spec.width} × ${spec.height}px · Original: ${selectedImage.naturalWidth} × ${selectedImage.naturalHeight}px · Cropped source: ${spec.sw} × ${spec.sh}px · Export at ${$('media-original-resolution').checked?'original':'preview'} resolution · Rotation: ${rotation}°.`;
+   $('media-undo').disabled=imageUndo.length===0;
+  }catch(error){$('media-resolution-status').textContent='Image update failed: '+String(error?.message||error);toast('Image update rejected.',true);}
  }
- output.toBlob(blob=>{if(blob)download('edited-image.png',blob,'image/png');else toast('Image export failed: try preview-size export.',true);},'image/png');
-});
+ function saveImageStep(){if(!selectedImage)return false;imageUndo.push({rotation,cropPercent});if(imageUndo.length>12)imageUndo.shift();return true;}
+ $('media-image').addEventListener('change',e=>{
+  const f=e.target.files?.[0];e.target.value='';if(!f)return;
+  if(f.size>8_000_000||!['image/png','image/jpeg','image/webp'].includes(f.type))return toast('Use PNG, JPEG or WebP (8 MB maximum).',true);
+  const url=URL.createObjectURL(f),img=new Image();
+  img.onload=()=>{
+   URL.revokeObjectURL(url);
+   try{imageGeometry(img.naturalWidth,img.naturalHeight,{original:true});}catch(error){return toast('Image rejected: '+String(error?.message||error),true);}
+   selectedImage=img;rotation=0;cropPercent=0;imageUndo=[];$('media-crop').value=0;redrawImage();toast('Image loaded locally.');
+  };
+  img.onerror=()=>{URL.revokeObjectURL(url);toast('Unable to read image.',true)};
+  img.src=url;
+ });
+ for(const id of ['media-brightness','media-contrast','media-saturation'])$(id).addEventListener('input',redrawImage);
+ $('media-crop').addEventListener('change',()=>{
+  if(!selectedImage)return;
+  const desired=Number($('media-crop').value);
+  if(desired===cropPercent)return;
+  saveImageStep();cropPercent=desired;redrawImage();
+ });
+ $('media-rotate-left').addEventListener('click',()=>{if(!saveImageStep())return toast('Load an image first.',true);rotation=(rotation+270)%360;redrawImage()});
+ $('media-rotate-right').addEventListener('click',()=>{if(!saveImageStep())return toast('Load an image first.',true);rotation=(rotation+90)%360;redrawImage()});
+ $('media-undo').addEventListener('click',()=>{
+  const prev=imageUndo.pop();if(!prev)return;
+  rotation=prev.rotation;cropPercent=prev.cropPercent;$('media-crop').value=cropPercent;redrawImage();
+ });
+ $('media-reset').addEventListener('click',()=>{
+  if(selectedImage)saveImageStep();
+  rotation=0;cropPercent=0;$('media-crop').value=0;
+  for(const id of ['media-brightness','media-contrast','media-saturation'])$(id).value=100;
+  redrawImage();
+ });
+ $('media-original-resolution').addEventListener('change',redrawImage);
+ $('media-download').addEventListener('click',()=>{
+  if(!selectedImage)return toast('Load an image first.',true);
+  let output=canvas;
+  if($('media-original-resolution').checked){
+   output=document.createElement('canvas');
+   const outCtx=output.getContext('2d');if(!outCtx)return toast('Cannot allocate full-resolution export.',true);
+   try{renderImageTo(outCtx,true);}catch(error){return toast('Image export blocked: '+String(error?.message||error),true);}
+  }
+  output.toBlob(blob=>{if(blob)download('edited-image.png',blob,'image/png');else toast('Image export failed: try preview-size export.',true);},'image/png');
+ });
  $('speech-start').addEventListener('click',()=>{const text=$('speech-text').value.trim();if(!text)return;if(!('speechSynthesis' in window))return toast('Speech synthesis unavailable in this browser.',true);speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text.slice(0,2000));utterance.rate=1;utterance.pitch=1;utterance.onend=()=>$('speech-status').textContent='Finished speaking.';speechSynthesis.speak(utterance);$('speech-status').textContent='Speaking through browser voices…';});$('speech-stop').addEventListener('click',()=>{if('speechSynthesis' in window)speechSynthesis.cancel();if(activeRecognition){const instance=activeRecognition;activeRecognition=null;try{instance.stop();}catch(error){console.warn('Unable to stop recognition:',error);}}$('speech-status').textContent='Speech and dictation stopped.';});$('speech-dictate').addEventListener('click',()=>{
  if(activeRecognition)return toast('Dictation is already active; use Stop speech / dictation.',true);
  const SpeechRec=window.SpeechRecognition||window.webkitSpeechRecognition;

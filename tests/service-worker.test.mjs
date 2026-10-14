@@ -44,9 +44,9 @@ test('D16: offline refresh reports cache update failure',async()=>{
 });
 
 test('P31: activation removes this app obsolete cache but preserves other sites',async()=>{
- const h=harness({existingCaches:['other-app-assets','mm-studio-shell-b03-3','mm-studio-shell-b03-4','mm-studio-shell-b03-5','mm-studio-shell-b03-6','mm-studio-shell-b03-7','mm-studio-shell-b03-8','mm-studio-shell-b03-9','mm-studio-shell-b03-10','mm-studio-shell-b03-11','mm-studio-shell-b03-12','mm-studio-shell-b03-13','mm-studio-shell-b03-14']});
+ const h=harness({existingCaches:['other-app-assets','mm-studio-shell-b03-3','mm-studio-shell-b03-4','mm-studio-shell-b03-5','mm-studio-shell-b03-6','mm-studio-shell-b03-7','mm-studio-shell-b03-8','mm-studio-shell-b03-9','mm-studio-shell-b03-10','mm-studio-shell-b03-11','mm-studio-shell-b03-12','mm-studio-shell-b03-13','mm-studio-shell-b03-14','mm-studio-shell-b03-15']});
  await h.activate();
- assert.deepEqual(h.deleted,['mm-studio-shell-b03-3','mm-studio-shell-b03-4','mm-studio-shell-b03-5','mm-studio-shell-b03-6','mm-studio-shell-b03-7','mm-studio-shell-b03-8','mm-studio-shell-b03-9','mm-studio-shell-b03-10','mm-studio-shell-b03-11','mm-studio-shell-b03-12','mm-studio-shell-b03-13','mm-studio-shell-b03-14']);
+ assert.deepEqual(h.deleted,['mm-studio-shell-b03-3','mm-studio-shell-b03-4','mm-studio-shell-b03-5','mm-studio-shell-b03-6','mm-studio-shell-b03-7','mm-studio-shell-b03-8','mm-studio-shell-b03-9','mm-studio-shell-b03-10','mm-studio-shell-b03-11','mm-studio-shell-b03-12','mm-studio-shell-b03-13','mm-studio-shell-b03-14','mm-studio-shell-b03-15']);
 });
 
 test('Q03: offline shell includes every direct static module import from main',()=>{
