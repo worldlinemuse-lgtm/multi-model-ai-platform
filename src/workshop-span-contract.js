@@ -19,8 +19,8 @@ const DEFAULT_LIMIT=160, DEFAULT_ACTIVE=20;
 const validate=(v,set,field)=>{if(typeof v!=='string'||!set.has(v))throw new TypeError('Invalid '+field);return v;};
 const toHex=bytes=>Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
 function secureBytes(length){
-  if(typeof crypto?.getRandomValues!=='function')throw new Error('Cryptographically secure random source required');
-  return crypto.getRandomValues(new Uint8Array(length));
+  if(typeof globalThis.crypto?.getRandomValues!=='function')throw new Error('Cryptographically secure random source required');
+  return globalThis.crypto.getRandomValues(new Uint8Array(length));
 }
 function secureId(bytes,randomBytes){
   const v=randomBytes(bytes);
@@ -33,6 +33,7 @@ const status=outcome=>outcome==='error'||outcome==='timeout'?'ERROR':outcome==='
 export function createWorkshopSpanContract({clock=()=>performance.now(),randomBytes=secureBytes,limit=DEFAULT_LIMIT,maxActive=DEFAULT_ACTIVE}={}){
   if(typeof clock!=='function'||typeof randomBytes!=='function'||!Number.isSafeInteger(limit)||limit<1||limit>500||!Number.isSafeInteger(maxActive)||maxActive<1||maxActive>50)throw TypeError('Invalid contract options');
   const active=new Map(),finished=[];
+  const counts=new Map(SPAN_OPERATIONS.map(name=>[name,{completed:0,errors:0,cancelled:0}]));
   let dropped=0,issued=0;
   const now=()=>{const t=clock();if(!Number.isFinite(t)||t<0)throw Error('Invalid monotonic time');return t;};
   function retain(span){finished.push(Object.freeze(span));if(finished.length>limit){finished.shift();dropped++;}}
@@ -49,6 +50,7 @@ export function createWorkshopSpanContract({clock=()=>performance.now(),randomBy
     const span=active.get(token);if(!span)return false;
     const elapsed=now()-span.start;
     active.delete(token);
+    const stat=counts.get(span.operation);stat.completed++;if(status(outcome)==='ERROR')stat.errors++;if(outcome==='cancelled')stat.cancelled++;
     retain({name:span.operation,traceId:span.traceId,spanId:span.spanId,
       parentSpanId:span.parentSpanId,kind:'INTERNAL',status:status(outcome),
       outcome,reason,durationMs:Math.max(0,Math.min(600000,Math.round(elapsed)))});
@@ -66,16 +68,14 @@ export function createWorkshopSpanContract({clock=()=>performance.now(),randomBy
   }
   function finishOutstanding(){
     // Explicit app-initiated shutdown only. Crashes cannot be observed retrospectively.
-    let n=0;
-    for(const token of [...active.keys()])if(active.has(token)){end(token,{outcome:'unknown',reason:'unobserved'});n++;}
-    return n;
+    const count=active.size;
+    for(const token of [...active.keys()])if(active.has(token))end(token,{outcome:'unknown',reason:'unobserved'});
+    return count;
   }
   function report(){
     const rows=SPAN_OPERATIONS.map(name=>{
-      const seen=finished.filter(x=>x.name===name);
-      return {name,coverage:seen.length?'OBSERVED':'NOT_OBSERVED',completed:seen.length,
-        errors:seen.filter(x=>x.status==='ERROR').length,
-        cancelled:seen.filter(x=>x.outcome==='cancelled').length};
+      const totals=counts.get(name);
+      return {name,coverage:totals.completed?'OBSERVED':'NOT_OBSERVED',...totals};
     });
     return {schema:'mm-otel-local-spans-v1',exportedAutomatically:false,
       active:active.size,retained:finished.length,dropped,
