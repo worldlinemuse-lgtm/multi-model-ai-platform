@@ -46,6 +46,21 @@ def main():
             page.locator('#run-code').click()
             expect(page.locator('#console-output').get_by_text('Execution complete.',exact=False)).to_be_visible(timeout=10000)
             expect(page.locator('#console-output')).to_contain_text('2 + 2 = 4',timeout=10000)
+            checkpoint('workshop diagnostics and editable local execution budget')
+            expect(page.locator('#code-time-limit')).to_have_value('6000')
+            page.locator('#code-time-limit').select_option('60000')
+            expect(page.locator('#code-time-limit')).to_have_value('60000')
+            page.locator('button[data-view="capabilities"]').click()
+            expect(page.locator('#workshop-metrics-summary')).to_contain_text('code-run: 1')
+            expect(page.locator('#workshop-metrics-events')).to_contain_text('code-run')
+            with page.expect_download(timeout=10000) as transfer:
+                page.locator('#workshop-metrics-download').click()
+            from json import loads
+            report=loads(transfer.value.path().read_text())
+            assert report['scope']=='in-memory-only'
+            assert any(row['op']=='code-run' and row['ok']>=1 for row in report['byOperation'])
+            assert 'Hello from Multi-Model Studio' not in str(report)
+            page.locator('button[data-view="workspace"]').click()
             checkpoint('preview HTML in isolated frame')
             page.locator('#preview-page').click()
             expect(page.frame_locator('#preview-host iframe').get_by_text('Hello from the browser workbench!')).to_have_count(1,timeout=12000)
