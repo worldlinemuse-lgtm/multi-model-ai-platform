@@ -26,11 +26,13 @@ def main():
         page.on('pageerror',lambda e:errors.append('pageerror'))
         page.goto(args.base_url.rstrip('/')+'/observability/browser-harness.html',wait_until='domcontentloaded',timeout=25000)
         expect(page.locator('#result')).to_have_text('PASS',timeout=15000)
+        page.goto(args.base_url.rstrip('/')+'/observability/metrics-browser-harness.html',wait_until='domcontentloaded',timeout=25000)
+        expect(page.locator('#metrics-result')).to_have_text('PASS',timeout=15000)
         assert not outgoing,'Unexpected external network request attempted'
         assert not errors,'Browser runtime exception'
         ctx.close()
         browser.close()
-        print('PASS: actual OTel SDK browser bundle; local trace; parent-child; no external network')
+        print('PASS: actual OTel traces + metrics SDK browser bundles; on-demand metrics, parent-child, no external network')
         return 0
 
 if __name__=='__main__':
