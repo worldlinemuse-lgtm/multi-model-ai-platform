@@ -28,11 +28,13 @@ def main():
         expect(page.locator('#result')).to_have_text('PASS',timeout=15000)
         page.goto(args.base_url.rstrip('/')+'/observability/metrics-browser-harness.html',wait_until='domcontentloaded',timeout=25000)
         expect(page.locator('#metrics-result')).to_have_text('PASS',timeout=15000)
+        page.goto(args.base_url.rstrip('/')+'/observability/csp-smoke.html',wait_until='domcontentloaded',timeout=25000)
+        expect(page.locator('#csp-result')).to_have_text('PASS',timeout=15000)
         assert not outgoing,'Unexpected external network request attempted'
         assert not errors,'Browser runtime exception'
         ctx.close()
         browser.close()
-        print('PASS: actual OTel traces + metrics SDK browser bundles; on-demand metrics, parent-child, no external network')
+        print('PASS: actual OTel traces + metrics SDK browser bundles; on-demand metrics, strict CSP, parent-child, no external network')
         return 0
 
 if __name__=='__main__':
