@@ -1,0 +1,13 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>OpenTelemetry local-only browser pilot</title></head><body><output id="result">NOT_RUN</output>
+<script type="module">
+ import { createLocalOtelPilot } from './dist/otel-local-pilot.js';
+ const otel=createLocalOtelPilot();
+ const root=otel.start('workshop.preview');
+ const child=otel.start('workshop.project_save',root);
+ otel.finish(child,'error','storage-failed');
+ otel.finish(root,'ok','none');
+ const snapshot=otel.snapshot();
+ const good=snapshot.recorded===2&&snapshot.active===0&&snapshot.events[0].traceId===snapshot.events[1].traceId&&snapshot.events[0].parentSpanId===snapshot.events[1].spanId;
+ document.getElementById('result').textContent=good?'PASS':'FAIL';
+ await otel.shutdown();
+</script></body></html>
