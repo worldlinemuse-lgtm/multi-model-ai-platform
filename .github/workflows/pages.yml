@@ -23,6 +23,12 @@ jobs:
           node-version: '24'
       - name: Unit and static checks
         run: npm test
+      - name: Isolated OpenTelemetry real-SDK checks and browser bundle
+        run: |
+          npm --prefix observability install --no-audit --no-fund
+          npm --prefix observability test
+          npm --prefix observability run bundle
+          test -s observability/dist/otel-local-pilot.js
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
@@ -42,6 +48,7 @@ jobs:
             sleep 1
           done
           python -u tests/browser_smoke.py --base-url http://127.0.0.1:8000
+          python -u tests/otel_sdk_browser.py --base-url http://127.0.0.1:8000
           python -u tests/startup_integrity_browser.py --base-url http://127.0.0.1:8000
           python -u tests/sw_nonblocking_boot_browser.py --base-url http://127.0.0.1:8000
           python -u tests/browser_regression.py --base-url http://127.0.0.1:8000
