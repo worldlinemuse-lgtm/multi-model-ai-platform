@@ -22,7 +22,9 @@ jobs:
         with:
           node-version: '24'
       - name: Install pinned OpenTelemetry dependencies for workshop bridge tests
-        run: npm --prefix observability ci --no-audit --no-fund
+        run: |
+          npm --prefix observability ci --no-audit --no-fund
+          npm --prefix observability run bundle
       - name: Unit and static checks
         run: npm test
       - name: Isolated OpenTelemetry real-SDK checks and browser bundle
