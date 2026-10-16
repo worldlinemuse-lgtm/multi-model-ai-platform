@@ -1,22 +1,94 @@
-# OpenTelemetry JavaScript SDK — isolated workshop pilot (not deployed/instrumented)
+# OpenTelemetry — production workshop integration
 
-This directory is an **independent opt-in SDK feasibility harness**. No application module imports this prototype. It is **not** a replacement for the existing V6.8 metrics or the unmerged PR46 standalone contract. It does not touch previously blocked telemetry/source writes or alter the production workshop.
+The real OpenTelemetry SDK (2.12.0) is wired into the production workshop via
+`src/otel-workshop.js`. This directory holds the SDK pilot modules, the
+pinned dependency lockfile, tests, and the browser-bundle build.
 
-### Pinned initial stack (Oct 15, 2026)
+## Architecture
 
-- `@opentelemetry/api` 1.9.0
-- `@opentelemetry/sdk-trace` 2.12.0 (new consolidated `TracerProvider`, **not deprecated `sdk-trace-web`**)
-- `@opentelemetry/resources` 2.12.0
-- `esbuild` 0.25.12 (build-only dependency)
+```
+src/main.js ──attachOtel()──▶ src/otel-workshop.js ──dynamic import──▶ observability/dist/*.js
+     │                                │                                (built by `npm run bundle`)
+     │                                │──▶ WhitelistMemoryExporter (traces, in-memory)
+     │                                └──▶ OnDemandReader (metrics, in-memory)
+     └──▶ src/request-trace.js (existing local counters; unchanged behavior)
+```
 
-`npm install` inside this directory is required once, then `npm test` and `npm run bundle`. A production adoption should commit a generated and audited lockfile, use `npm ci`, perform SBOM/license checks, and verify exact bundle SHA across hosted output before wiring it into the application. These are not yet satisfied by this pilot.
+- **One tracing provider, one metrics provider**, created once per page load
+  by `initOtelBridge()` (async, 5s timeout, never throws, never blocks boot).
+- **Decorator pattern**: `attachOtel()` wraps the existing metrics object; every
+  `begin`/`finish`/`record` mirrors to the SDK. Zero call-site changes.
+- **Local-only**: memory exporters, no OTLP, no fetch/XHR/WebSocket in the
+  bundles (pinned by `tests/otel-security.test.mjs`). No global tracer
+  provider, no auto-instrumentation.
+- **Fixed dictionaries**: only pre-approved operation/outcome/reason labels
+  reach the SDK. Invalid labels throw before either SDK sees them.
 
-The pilot creates a real `TracerProvider`, an `AlwaysOnSampler`, `SimpleSpanProcessor`, `resourceFromAttributes` with fixed service metadata, and a custom **local-only** OpenTelemetry `SpanExporter` whose export callback returns SUCCESS. No fetch, XMLHttpRequest, localStorage, IndexedDB, console exporter, OTLP exporter, automatic instrumentation, browser global tracer provider, or cross-origin propagation is registered. Parent contexts are explicit handles across async work, which avoids auto-patching user code.
+## Operation coverage matrix
 
-The exporter projects only allowlisted fixed semantic fields; it never stores OTel ReadableSpan objects or arbitrary attributes. Counters and 160 retained events stay in memory. It holds at most 20 active spans. `shutdown()` terminates outstanding spans with `unknown` and flushes/shuts down the SDK. This is deliberately not a general-purpose provider instrumentation SDK or a browser error logger.
+| App operation   | OTel operation            | Instrumented at |
+|-----------------|---------------------------|-----------------|
+| boot            | workshop.boot             | module init     |
+| code-run        | workshop.code_run         | runCode / onStop / supersede |
+| save            | workshop.project_save     | saveSoon / saveNow |
+| preview         | workshop.preview          | previewPage |
+| snapshot        | workshop.snapshot         | snapshot / restoreSnapshot |
+| project-import  | workshop.project_import   | importProject / importTextFiles / importBinaryAssets / importAll |
+| project-export  | workshop.project_export   | export-json / export-zip / exportAll / snapshot export |
+| data-analyze    | workshop.data_analyze     | doAnalyze / group-run / transform-apply |
+| offline-refresh | workshop.offline_refresh  | refreshOfflineCache |
+| storage-check   | workshop.storage_check    | boot storage read |
+| ui-error        | — (not mirrored)          | record only |
 
-`browser-harness.html` uses a locally built JS bundle with a real Chromium smoke. The test fails if the pilot attempts any external request or produces a page exception. It is NOT a browser test of the production main interface.
+## Trace schema (WhitelistMemoryExporter)
 
-**Known gaps:** current shell network access is unavailable, so local full-sdk tests and bundling require GitHub-hosted CI. `npm` installation and the real-SDK test must pass there before the integration is called configured. A pinned lockfile, benchmark on all target browsers, independent dependency audit, and production UX connection remain later gates. Never enable remote exports without explicit approval.
+Each retained event: `{op, outcome, reason, durationMs, traceId, spanId,
+parentSpanId}` — all fixed-format. `traceId` 32 hex chars, `spanId`/`parentSpanId`
+16 hex chars (null when absent). Outcomes: `ok, error, timeout, cancelled,
+warning, unknown`. Reasons: `none, invalid-input, worker-failed, runtime-failed,
+time-limit, user-stop, superseded, parent-closed, storage-failed,
+offline-unavailable, resource-limit, unsupported, unobserved`.
 
-Official OpenTelemetry JS consolidated SDK documentation: https://github.com/open-telemetry/opentelemetry-js/tree/main/packages/sdk-trace
+## Metric schema (OnDemandReader)
+
+Instruments: `mm.workshop.operation.completed` (counter),
+`mm.workshop.operation.duration` (histogram, ms),
+`mm.workshop.operation.active` (up-down counter). Attributes are fixed
+`mm.operation` / `mm.outcome` pairs only. Collected on demand via `collect()`;
+no periodic exporter.
+
+## Resource limits
+
+- 20 max active spans (excess starts rejected, counted as `discardedStarts`)
+- 160 max retained trace events (oldest dropped, counted as `discarded`)
+- Durations clipped at 600,000 ms
+- Metrics: 80 cardinality limit, 64 KiB max diagnostic report
+
+## Failure recovery
+
+| Condition | Behavior |
+|---|---|
+| Bundle missing (404) | state `unavailable`; workshop runs normally |
+| Bundle corrupt / factory throws | state `failed`; half-created pilot shut down |
+| Import > 5s | state `unavailable` (timeout) |
+| SDK throws at runtime | guarded; workshop behavior never affected |
+| User disables toggle | state `disabled`; mirror gated, base counters follow toggle |
+| Clear diagnostics | active OTel spans finished, both SDKs cleared |
+
+## Build & deploy
+
+- `npm ci` (pinned `package-lock.json`) → `npm test` → `npm run bundle`
+- CI builds `observability/dist/` in `checks`, uploads as the `otel-dist`
+  artifact, and `deploy` restores it before publishing to GitHub Pages.
+- `dist/` is gitignored; the bundles are verified byte-for-byte against the
+  deployed site by `tests/hosted_integrity.py`.
+- Production dependencies: `@opentelemetry/api`, `@opentelemetry/resources`,
+  `@opentelemetry/sdk-trace`, `@opentelemetry/sdk-metrics` (all Apache-2.0).
+  Build-only: `esbuild` (MIT).
+
+## Privacy
+
+No user content ever reaches the SDK: no code, prompts, filenames, URLs,
+keys, or raw error text. The exporter allowlists span names and drops foreign
+spans. Nothing is transmitted off-device. Telemetry faults cannot affect
+application behavior (every mirror call is guarded).
