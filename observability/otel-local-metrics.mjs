@@ -104,5 +104,15 @@ export function createLocalOtelMetrics({clock=()=>performance.now()}={}){
   disposed=true;collectionGeneration++;
   await provider.shutdown();
  }
- return Object.freeze({begin,finish,record,summary,collect,shutdown});
+ /** Reset retained state without shutting down: active tokens are closed
+  *  (gauges return to zero) and all counters/totals are zeroed. */
+ function clear(){
+  for(const [token,item] of [...active]){
+   active.delete(token);
+   try{activeGauge.add(-1,{'mm.operation':item.op});}catch{}
+  }
+  for(const op of OPERATIONS)totals.set(op,{total:0,ok:0,errors:0,timeouts:0,cancelled:0,warnings:0,unknown:0,durationSamples:0});
+  rejectedStarts=0;
+ }
+ return Object.freeze({begin,finish,record,summary,collect,shutdown,clear});
 }

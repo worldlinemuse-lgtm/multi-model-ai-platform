@@ -41,6 +41,7 @@ export function setupLabs({el,toast,download,metrics=null,getDatasets=()=>[],com
   $('data-group-output').textContent='Choose a group and numeric field, then Analyze groups.';
   $('data-status').textContent=`${report.rows} rows × ${report.columns} columns\nNumeric fields: ${report.numeric.join(', ')||'none'}\n`+Object.entries(report.stats).map(([k,v])=>`${k}: min ${v.min.toFixed(2)}, max ${v.max.toFixed(2)}, mean ${v.mean.toFixed(2)}`).join('\n');const axis=$('data-axis');axis.replaceChildren();for(const col of report.numeric)axis.add(new Option(col,col));if(!report.numeric.length)axis.add(new Option('No numeric fields',''));renderTransformFields();renderTable();drawChart();toast('Local dataset analyzed.');if(span)metrics.finish(span,'ok');}catch(e){parsed=null;tablePage=0;chartPage=0;$('data-status').textContent='Analysis failed: '+e.message;$('data-axis').replaceChildren(new Option('No numeric fields',''));renderTransformFields();renderTable();drawChart();if(span)metrics.finish(span,'error','invalid-input');toast('Analysis failed: '+e.message,true);}}
  $('data-group-run').addEventListener('click',()=>{
+  const span=metrics?metrics.begin('data-analyze'):null;
   try{
    if(!parsed)throw Error('Analyze a dataset first.');
    const rows=groupNumericStats(parsed,{groupColumn:$('data-group-field').value,valueColumn:$('data-group-value').value,missingPolicy:$('data-group-missing').value});
@@ -49,8 +50,9 @@ export function setupLabs({el,toast,download,metrics=null,getDatasets=()=>[],com
     ', mean '+(item.mean===null?'unknown':item.mean.toFixed(3))+
     ', min '+(item.min??'unknown')+', max '+(item.max??'unknown')
    ).join('\n')||'No groups.';
+   if(span)metrics.finish(span,'ok');
    toast('Grouped local analysis ready.');
-  }catch(error){$('data-group-output').textContent='Grouped analysis rejected: '+error.message;toast('Grouped analysis failed.',true);}
+  }catch(error){if(span)metrics.finish(span,'error','invalid-input');$('data-group-output').textContent='Grouped analysis rejected: '+error.message;toast('Grouped analysis failed.',true);}
  });
  $('data-analyze').addEventListener('click',doAnalyze);$('data-axis').addEventListener('change',()=>{chartPage=0;drawChart();});$('data-table-prev').addEventListener('click',()=>{if(parsed&&tablePage>0){tablePage--;renderTable();}});$('data-table-next').addEventListener('click',()=>{if(parsed&&tablePage+1<Math.ceil(parsed.records.length/25)){tablePage++;renderTable();}});$('data-chart-prev').addEventListener('click',()=>{if(parsed&&chartPage>0){chartPage--;drawChart();}});$('data-chart-next').addEventListener('click',()=>{if(parsed&&chartPage+1<Math.ceil(parsed.records.length/15)){chartPage++;drawChart();}});$('data-import').addEventListener('change',async e=>{const f=e.target.files?.[0];e.target.value='';if(!f)return;if(f.size>2_000_000)return toast('Dataset too large.',true);$('data-input').value=await f.text();doAnalyze();});$('data-export').addEventListener('click',()=>download('data-export.txt',$('data-input').value,'text/plain'));
  $('data-saved').addEventListener('change',refreshSavedDatasets);
@@ -90,6 +92,7 @@ export function setupLabs({el,toast,download,metrics=null,getDatasets=()=>[],com
  });
  $('data-transform').addEventListener('change',()=>{$('data-transform-value').disabled=['sort-asc','sort-desc','dedupe'].includes($('data-transform').value);});
  $('data-transform-apply').addEventListener('click',()=>{
+  const span=metrics?metrics.begin('data-analyze'):null;
   try{
    if(!parsed)throw Error('Analyze data first.');
    const operation=$('data-transform').value,column=$('data-transform-field').value,value=$('data-transform-value').value;
@@ -98,8 +101,9 @@ export function setupLabs({el,toast,download,metrics=null,getDatasets=()=>[],com
    if(output.length>2_000_000)throw Error('Transformed dataset exceeds the 2 MB limit.');
    const old=$('data-input').value;
    $('data-input').value=output;undoSource=old;doAnalyze();
+   if(span)metrics.finish(span,'ok');
    toast('Local transformation applied ('+result.records.length+' rows). Undo is available.');
-  }catch(error){toast('Transformation failed: '+error.message,true);}
+  }catch(error){if(span)metrics.finish(span,'error','invalid-input');toast('Transformation failed: '+error.message,true);}
  });
  $('data-transform-undo').addEventListener('click',()=>{
   if(undoSource===null)return;

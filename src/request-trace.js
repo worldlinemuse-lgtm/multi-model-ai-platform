@@ -25,7 +25,7 @@ export const WORKSHOP_OPERATIONS = Object.freeze([
 export const WORKSHOP_OUTCOMES = Object.freeze(['ok','error','timeout','cancelled','warning']);
 export const WORKSHOP_REASONS = Object.freeze([
   'none','runtime-error','uncaught-error','unhandled-rejection','user-stop',
-  'time-limit','output-limit','storage-error','invalid-input',
+  'superseded','time-limit','output-limit','storage-error','invalid-input',
   'unsupported-asset','worker-error','offline-unavailable','unknown'
 ]);
 const OPS = new Set(WORKSHOP_OPERATIONS), OUTCOMES = new Set(WORKSHOP_OUTCOMES), REASONS = new Set(WORKSHOP_REASONS);
