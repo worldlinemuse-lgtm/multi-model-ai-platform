@@ -156,10 +156,15 @@ test('otelDiagnosticsText reports real SDK state with trace ids', async () => {
   const m = attachOtel(createWorkshopMetrics({clock: () => 0}), readyResult());
   const t = m.begin('boot');
   m.finish(t, 'ok');
+  const t2 = m.begin('boot');
+  m.finish(t2, 'error', 'runtime-error');
   const text = await otelDiagnosticsText(m);
   assert.match(text, /READY/);
   assert.match(text, /workshop\.boot/);
-  assert.match(text, /trace /);
+  assert.match(text, /trace [0-9a-f]{32}/);
+  assert.match(text, /span [0-9a-f]{16}/);
+  assert.match(text, /p50=\d+ms p95=\d+ms/);
+  assert.match(text, /failure rate 50\.0%/);
   assert.match(text, /Limits:/);
 });
 

@@ -217,23 +217,40 @@ export async function otelDiagnosticsText(decorated) {
   const bridge = decorated.otelBridge();
   lines.push(
     `Local-only, in-memory. Limits: ${OTEL_LIMITS.maxActiveSpans} active spans, ` +
-    `${OTEL_LIMITS.maxRetainedEvents} retained events, durations clipped at ${OTEL_LIMITS.maxDurationMs}ms.`
+    `${OTEL_LIMITS.maxRetainedEvents} retained events, durations clipped at ${OTEL_LIMITS.maxDurationMs}ms. ` +
+    `Outcome labels: OK=confirmed success, FAILED=error/timeout, UNKNOWN=finished without a terminal state, ` +
+    `NOT OBSERVED=no reason recorded.`
   );
+  let events = [];
   try {
     const snap = bridge.pilot.snapshot();
+    events = snap.events;
     lines.push(
       `Traces: ${snap.recorded} recorded, ${snap.discarded} discarded (overflow), ` +
       `${snap.discardedStarts} rejected starts (backpressure), ${snap.active} active`
     );
-    for (const e of snap.events.slice(-8).reverse()) {
+    // Duration distribution per operation from real span data.
+    const byOp = new Map();
+    for (const e of events) {
+      if (e.durationMs === null) continue;
+      if (!byOp.has(e.op)) byOp.set(e.op, []);
+      byOp.get(e.op).push(e.durationMs);
+    }
+    for (const [op, ds] of [...byOp.entries()].sort()) {
+      ds.sort((a, b) => a - b);
+      const q = p => ds[Math.min(ds.length - 1, Math.ceil(ds.length * p) - 1)];
+      lines.push(`  ${op}: n=${ds.length} p50=${q(0.5)}ms p95=${q(0.95)}ms max=${ds[ds.length - 1]}ms`);
+    }
+    for (const e of events.slice(-8).reverse()) {
       lines.push(
         `  ${e.op} · ${e.outcome} · ${e.reason} · ` +
         `${e.durationMs === null ? 'duration n/a' : e.durationMs + 'ms'}` +
-        `${e.traceId ? ' · trace ' + String(e.traceId).slice(0, 8) : ''}` +
-        `${e.parentSpanId ? ' · child of ' + String(e.parentSpanId).slice(0, 8) : ''}`
+        `${e.traceId ? ' · trace ' + e.traceId : ''}` +
+        `${e.spanId ? ' · span ' + e.spanId : ''}` +
+        `${e.parentSpanId ? ' · parent ' + e.parentSpanId : ''}`
       );
     }
-    if (!snap.events.length) lines.push('  no spans recorded yet');
+    if (!events.length) lines.push('  no spans recorded yet');
   } catch {
     lines.push('Trace snapshot unavailable.');
   }
@@ -246,9 +263,11 @@ export async function otelDiagnosticsText(decorated) {
       `${report.sdkErrorCount ? `, ${report.sdkErrorCount} SDK errors` : ''}`
     );
     for (const o of rows) {
+      const bad = o.errors + o.timeouts;
+      const rate = o.total ? (100 * bad / o.total).toFixed(1) : '0.0';
       lines.push(
         `  ${o.operation}: ${o.total} total / ${o.ok} ok / ${o.errors} error / ` +
-        `${o.timeouts} timeout / ${o.cancelled} cancelled`
+        `${o.timeouts} timeout / ${o.cancelled} cancelled / failure rate ${rate}%`
       );
     }
     if (!rows.length) lines.push('  no operations recorded yet');

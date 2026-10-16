@@ -57,6 +57,7 @@ jobs:
           done
           python -u tests/browser_smoke.py --base-url http://127.0.0.1:8000
           python -u tests/otel_sdk_browser.py --base-url http://127.0.0.1:8000
+          python -u tests/otel_workshop_browser.py --base-url http://127.0.0.1:8000
           python -u tests/startup_integrity_browser.py --base-url http://127.0.0.1:8000
           python -u tests/sw_nonblocking_boot_browser.py --base-url http://127.0.0.1:8000
           python -u tests/browser_regression.py --base-url http://127.0.0.1:8000
@@ -100,6 +101,11 @@ jobs:
       DEPLOYED_URL: ${{ needs.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+      - name: Restore OTel bundles for integrity comparison
+        uses: actions/download-artifact@v4
+        with:
+          name: otel-dist
+          path: observability/dist/
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
