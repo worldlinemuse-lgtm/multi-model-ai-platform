@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {createLocalOtelPilot, WhitelistMemoryExporter} from '../otel-local-pilot.mjs';
 
 const hasOnlySafeKeys = item => Object.keys(item).sort().join(',') ===
-  'durationMs,op,outcome,parentSpanId,reason,spanId,traceId';
+  'durationMs,op,outcome,parentSpanId,phases,reason,spanId,traceId';
 
 test('real SDK: asynchronous boundaries preserve parent-child links only when parent handle supplied', async () => {
   const otel=createLocalOtelPilot();

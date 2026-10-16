@@ -9,7 +9,7 @@ import {MeterProvider,MetricReader} from '@opentelemetry/sdk-metrics';
 export const OPERATIONS=Object.freeze([
  'workshop.boot','workshop.code_run','workshop.project_save','workshop.preview',
  'workshop.snapshot','workshop.project_import','workshop.project_export',
- 'workshop.data_analyze','workshop.offline_refresh','workshop.storage_check'
+ 'workshop.data_analyze','workshop.offline_refresh','workshop.storage_check','workshop.inference'
 ]);
 export const OUTCOMES=Object.freeze(['ok','error','timeout','cancelled','warning','unknown']);
 const OP=new Set(OPERATIONS),OUT=new Set(OUTCOMES);

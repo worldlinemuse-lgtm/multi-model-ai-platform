@@ -43,7 +43,7 @@ test('manual collection reports only approved fixed fields',async()=>{
  const report=await s.collect();
  const txt=JSON.stringify(report);
  for(const key of ['resourceMetrics','scopeMetrics','exception.message','url.full','filename','stack','attributes','dataPoints'])assert.ok(!txt.includes('"'+key+'"'));
- assert.equal(report.byOperation.length,10);
+ assert.equal(report.byOperation.length,11);
  await s.shutdown();
 });
 
