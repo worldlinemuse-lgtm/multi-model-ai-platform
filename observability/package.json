@@ -1,0 +1,20 @@
+{
+  "name": "mm-workshop-opentelemetry-pilot",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Standalone, local-only OTel SDK integration acceptance; not imported by production workshop",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "bundle": "esbuild otel-local-pilot.mjs --bundle --minify --platform=browser --format=esm --target=es2022 --outfile=dist/otel-local-pilot.js --metafile=dist/bundle-meta.json && esbuild otel-local-metrics.mjs --bundle --minify --platform=browser --format=esm --target=es2022 --outfile=dist/otel-local-metrics.js"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/resources": "2.12.0",
+    "@opentelemetry/sdk-trace": "2.12.0",
+    "@opentelemetry/sdk-metrics": "2.12.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}

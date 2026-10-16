@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>OpenTelemetry local-only Metrics SDK acceptance</title></head><body>
+<output id="metrics-result">NOT_RUN</output>
+<script type="module">
+import {createLocalOtelMetrics} from './dist/otel-local-metrics.js';
+const result=document.getElementById('metrics-result');
+try{
+ const metrics=createLocalOtelMetrics();
+ const boot=metrics.begin('workshop.boot');
+ await Promise.resolve();
+ const preview=metrics.begin('workshop.preview');
+ metrics.finish(preview,'error');
+ metrics.finish(boot,'ok');
+ metrics.record('workshop.data_analyze','warning');
+ const report=await metrics.collect();
+ const values=report.byOperation;
+ const check=report.collectionStatus==='observed' &&
+  report.sdkInstrumentNames.includes('mm.workshop.operation.completed') &&
+  report.sdkInstrumentNames.includes('mm.workshop.operation.duration') &&
+  report.sdkInstrumentNames.includes('mm.workshop.operation.active') &&
+  report.sdkErrorCount===0 && report.active===0 &&
+  values.find(x=>x.operation==='workshop.boot').ok===1 &&
+  values.find(x=>x.operation==='workshop.preview').errors===1 &&
+  values.find(x=>x.operation==='workshop.data_analyze').warnings===1 &&
+  !JSON.stringify(report).includes('resourceMetrics') &&
+  !JSON.stringify(report).includes('dataPoints');
+ await metrics.shutdown();
+ result.textContent=check?'PASS':'FAIL';
+}catch{
+ result.textContent='FAIL';
+}
+</script>
+</body></html>

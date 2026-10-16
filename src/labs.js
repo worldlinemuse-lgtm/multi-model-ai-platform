@@ -11,7 +11,7 @@ export function numericValue(value){
  return Number.isFinite(converted)?converted:null;
 }
 export function analyzeDataset(parsed){const {columns,records}=parsed;const numeric=columns.filter(col=>records.some(row=>numericValue(row[col])!==null));const stats={};for(const col of numeric){const arr=records.map(row=>numericValue(row[col])).filter(n=>n!==null);if(arr.length)stats[col]={count:arr.length,min:Math.min(...arr),max:Math.max(...arr),mean:arr.reduce((a,b)=>a+b,0)/arr.length};}return {rows:records.length,columns:columns.length,numeric,stats};}
-export function setupLabs({el,toast,download,getDatasets=()=>[],commitDatasets=async()=>{throw Error('Workspace persistence is not configured');}}){
+export function setupLabs({el,toast,download,metrics=null,getDatasets=()=>[],commitDatasets=async()=>{throw Error('Workspace persistence is not configured');}}){
  let parsed=null,selectedImage=null,selectedNote='',activeRecognition=null,tablePage=0,chartPage=0,undoSource=null,rotation=0,cropPercent=0,imageUndo=[];const $=el;
  function refreshSavedDatasets(){
   const selected=$('data-saved').value,items=getDatasets(),control=$('data-saved');
@@ -32,15 +32,16 @@ export function setupLabs({el,toast,download,getDatasets=()=>[],commitDatasets=a
  }
  function renderTable(){const host=$('data-table');host.replaceChildren();if(!parsed){$('data-table-status').textContent='No table data';return;}const total=parsed.records.length,pages=Math.max(1,Math.ceil(total/25));tablePage=Math.max(0,Math.min(tablePage,pages-1));$('data-table-status').textContent=`Rows ${total?tablePage*25+1:0}–${Math.min(total,(tablePage+1)*25)} of ${total} · ${parsed.columns.length} columns`;$('data-table-prev').disabled=tablePage===0;$('data-table-next').disabled=tablePage>=pages-1;const table=document.createElement('table'),head=document.createElement('thead'),header=document.createElement('tr');for(const column of parsed.columns){const th=document.createElement('th');th.textContent=column;header.append(th);}head.append(header);table.append(head);const body=document.createElement('tbody');for(const row of parsed.records.slice(tablePage*25,(tablePage+1)*25)){const tr=document.createElement('tr');for(const col of parsed.columns){const td=document.createElement('td');td.textContent=typeof row[col]==='object'?JSON.stringify(row[col]).slice(0,100):String(row[col]??'').slice(0,120);tr.append(td);}body.append(tr);}table.append(body);host.append(table);}
  function drawChart(){const canvas=$('data-chart'),ctx=canvas.getContext('2d');canvas.width=900;canvas.height=470;ctx.fillStyle='#0b1426';ctx.fillRect(0,0,900,470);if(!parsed){$('data-chart-status').textContent='No chart data';return;}const total=parsed.records.length,pages=Math.max(1,Math.ceil(total/15));chartPage=Math.max(0,Math.min(chartPage,pages-1));$('data-chart-status').textContent=`Chart rows ${total?chartPage*15+1:0}–${Math.min(total,(chartPage+1)*15)} of ${total}`;$('data-chart-prev').disabled=chartPage===0;$('data-chart-next').disabled=chartPage>=pages-1;const col=$('data-axis').value;if(!col)return;const labels=parsed.records.slice(chartPage*15,(chartPage+1)*15).map((r,i)=>String(Object.values(r)[0]??`#${i+1}`).slice(0,9)),nums=parsed.records.slice(chartPage*15,(chartPage+1)*15).map(r=>numericValue(r[col]));if(!nums.length)return;const available=nums.filter(v=>v!==null);if(!available.length)return;const lo=Math.min(0,...available),hi=Math.max(0,...available);const range=Math.max(1,hi-lo),top=30,bottom=414,left=55,right=860;ctx.strokeStyle='#64748b';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(left,top);ctx.lineTo(left,bottom);ctx.lineTo(right,bottom);ctx.stroke();ctx.font='16px ui-monospace, monospace';ctx.fillStyle='#b9cbe3';for(let i=0;i<5;i++){const y=bottom-(i/4)*(bottom-top);const v=lo+(i/4)*range;ctx.fillText(v.toFixed(1),6,y+5);ctx.strokeStyle='#243854';ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(right,y);ctx.stroke();}const width=(right-left)/nums.length;nums.forEach((v,i)=>{if(v===null)return;const y0=bottom-(0-lo)/range*(bottom-top),y1=bottom-(v-lo)/range*(bottom-top),barx=left+width*i+Math.min(12,width*.1),barwidth=width-Math.min(20,width*.2);ctx.fillStyle='#76d3ef';ctx.fillRect(barx,Math.min(y0,y1),barwidth,Math.max(2,Math.abs(y0-y1)));ctx.save();ctx.translate(barx+barwidth/2,450);ctx.rotate(-Math.PI/6);ctx.fillStyle='#a9b8d0';ctx.font='12px ui-monospace, monospace';ctx.textAlign='right';ctx.fillText(labels[i],0,0);ctx.restore();});}
- function doAnalyze(){try{parsed=parseDataset($('data-input').value);tablePage=0;chartPage=0;const report=analyzeDataset(parsed);
+ function doAnalyze(){const span=metrics?metrics.begin('data-analyze'):null;let ok=true;try{parsed=parseDataset($('data-input').value);tablePage=0;chartPage=0;const report=analyzeDataset(parsed);
   const groupEl=$('data-group-field'),numericEl=$('data-group-value');
   groupEl.replaceChildren();numericEl.replaceChildren();
   for(const column of parsed.columns)groupEl.add(new Option(column,column));
   for(const column of report.numeric)numericEl.add(new Option(column,column));
   $('data-group-run').disabled=parsed.columns.length<2||!report.numeric.length;
   $('data-group-output').textContent='Choose a group and numeric field, then Analyze groups.';
-  $('data-status').textContent=`${report.rows} rows × ${report.columns} columns\nNumeric fields: ${report.numeric.join(', ')||'none'}\n`+Object.entries(report.stats).map(([k,v])=>`${k}: min ${v.min.toFixed(2)}, max ${v.max.toFixed(2)}, mean ${v.mean.toFixed(2)}`).join('\n');const axis=$('data-axis');axis.replaceChildren();for(const col of report.numeric)axis.add(new Option(col,col));if(!report.numeric.length)axis.add(new Option('No numeric fields',''));renderTransformFields();renderTable();drawChart();toast('Local dataset analyzed.');}catch(e){parsed=null;tablePage=0;chartPage=0;$('data-status').textContent='Analysis failed: '+e.message;$('data-axis').replaceChildren(new Option('No numeric fields',''));renderTransformFields();renderTable();drawChart();toast('Analysis failed: '+e.message,true);}}
+  $('data-status').textContent=`${report.rows} rows × ${report.columns} columns\nNumeric fields: ${report.numeric.join(', ')||'none'}\n`+Object.entries(report.stats).map(([k,v])=>`${k}: min ${v.min.toFixed(2)}, max ${v.max.toFixed(2)}, mean ${v.mean.toFixed(2)}`).join('\n');const axis=$('data-axis');axis.replaceChildren();for(const col of report.numeric)axis.add(new Option(col,col));if(!report.numeric.length)axis.add(new Option('No numeric fields',''));renderTransformFields();renderTable();drawChart();toast('Local dataset analyzed.');if(span)metrics.finish(span,'ok');}catch(e){parsed=null;tablePage=0;chartPage=0;$('data-status').textContent='Analysis failed: '+e.message;$('data-axis').replaceChildren(new Option('No numeric fields',''));renderTransformFields();renderTable();drawChart();if(span)metrics.finish(span,'error','invalid-input');toast('Analysis failed: '+e.message,true);}}
  $('data-group-run').addEventListener('click',()=>{
+  const span=metrics?metrics.begin('data-analyze'):null;
   try{
    if(!parsed)throw Error('Analyze a dataset first.');
    const rows=groupNumericStats(parsed,{groupColumn:$('data-group-field').value,valueColumn:$('data-group-value').value,missingPolicy:$('data-group-missing').value});
@@ -49,8 +50,9 @@ export function setupLabs({el,toast,download,getDatasets=()=>[],commitDatasets=a
     ', mean '+(item.mean===null?'unknown':item.mean.toFixed(3))+
     ', min '+(item.min??'unknown')+', max '+(item.max??'unknown')
    ).join('\n')||'No groups.';
+   if(span)metrics.finish(span,'ok');
    toast('Grouped local analysis ready.');
-  }catch(error){$('data-group-output').textContent='Grouped analysis rejected: '+error.message;toast('Grouped analysis failed.',true);}
+  }catch(error){if(span)metrics.finish(span,'error','invalid-input');$('data-group-output').textContent='Grouped analysis rejected: '+error.message;toast('Grouped analysis failed.',true);}
  });
  $('data-analyze').addEventListener('click',doAnalyze);$('data-axis').addEventListener('change',()=>{chartPage=0;drawChart();});$('data-table-prev').addEventListener('click',()=>{if(parsed&&tablePage>0){tablePage--;renderTable();}});$('data-table-next').addEventListener('click',()=>{if(parsed&&tablePage+1<Math.ceil(parsed.records.length/25)){tablePage++;renderTable();}});$('data-chart-prev').addEventListener('click',()=>{if(parsed&&chartPage>0){chartPage--;drawChart();}});$('data-chart-next').addEventListener('click',()=>{if(parsed&&chartPage+1<Math.ceil(parsed.records.length/15)){chartPage++;drawChart();}});$('data-import').addEventListener('change',async e=>{const f=e.target.files?.[0];e.target.value='';if(!f)return;if(f.size>2_000_000)return toast('Dataset too large.',true);$('data-input').value=await f.text();doAnalyze();});$('data-export').addEventListener('click',()=>download('data-export.txt',$('data-input').value,'text/plain'));
  $('data-saved').addEventListener('change',refreshSavedDatasets);
@@ -90,6 +92,7 @@ export function setupLabs({el,toast,download,getDatasets=()=>[],commitDatasets=a
  });
  $('data-transform').addEventListener('change',()=>{$('data-transform-value').disabled=['sort-asc','sort-desc','dedupe'].includes($('data-transform').value);});
  $('data-transform-apply').addEventListener('click',()=>{
+  const span=metrics?metrics.begin('data-analyze'):null;
   try{
    if(!parsed)throw Error('Analyze data first.');
    const operation=$('data-transform').value,column=$('data-transform-field').value,value=$('data-transform-value').value;
@@ -98,8 +101,9 @@ export function setupLabs({el,toast,download,getDatasets=()=>[],commitDatasets=a
    if(output.length>2_000_000)throw Error('Transformed dataset exceeds the 2 MB limit.');
    const old=$('data-input').value;
    $('data-input').value=output;undoSource=old;doAnalyze();
+   if(span)metrics.finish(span,'ok');
    toast('Local transformation applied ('+result.records.length+' rows). Undo is available.');
-  }catch(error){toast('Transformation failed: '+error.message,true);}
+  }catch(error){if(span)metrics.finish(span,'error','invalid-input');toast('Transformation failed: '+error.message,true);}
  });
  $('data-transform-undo').addEventListener('click',()=>{
   if(undoSource===null)return;

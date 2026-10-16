@@ -20,12 +20,12 @@ export function auditTraceFields(metadata={}){
  */
 export const WORKSHOP_OPERATIONS = Object.freeze([
   'boot','code-run','save','preview','project-import','project-export',
-  'storage-check','offline-refresh','ui-error'
+  'storage-check','offline-refresh','ui-error','snapshot','data-analyze'
 ]);
 export const WORKSHOP_OUTCOMES = Object.freeze(['ok','error','timeout','cancelled','warning']);
 export const WORKSHOP_REASONS = Object.freeze([
   'none','runtime-error','uncaught-error','unhandled-rejection','user-stop',
-  'time-limit','output-limit','storage-error','invalid-input',
+  'superseded','time-limit','output-limit','storage-error','invalid-input',
   'unsupported-asset','worker-error','offline-unavailable','unknown'
 ]);
 const OPS = new Set(WORKSHOP_OPERATIONS), OUTCOMES = new Set(WORKSHOP_OUTCOMES), REASONS = new Set(WORKSHOP_REASONS);

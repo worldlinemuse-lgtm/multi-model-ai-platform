@@ -21,8 +21,24 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+      - name: Install pinned OpenTelemetry dependencies for workshop bridge tests
+        run: |
+          npm --prefix observability ci --no-audit --no-fund
+          npm --prefix observability run bundle
       - name: Unit and static checks
         run: npm test
+      - name: Isolated OpenTelemetry real-SDK checks and browser bundle
+        run: |
+          npm --prefix observability test
+          npm --prefix observability run bundle
+          test -s observability/dist/otel-local-pilot.js
+          test -s observability/dist/otel-local-metrics.js
+      - name: Upload OTel bundles for the deploy job
+        uses: actions/upload-artifact@v4
+        with:
+          name: otel-dist
+          path: observability/dist/
+          if-no-files-found: error
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
@@ -42,6 +58,8 @@ jobs:
             sleep 1
           done
           python -u tests/browser_smoke.py --base-url http://127.0.0.1:8000
+          python -u tests/otel_sdk_browser.py --base-url http://127.0.0.1:8000
+          python -u tests/otel_workshop_browser.py --base-url http://127.0.0.1:8000
           python -u tests/startup_integrity_browser.py --base-url http://127.0.0.1:8000
           python -u tests/sw_nonblocking_boot_browser.py --base-url http://127.0.0.1:8000
           python -u tests/browser_regression.py --base-url http://127.0.0.1:8000
@@ -65,6 +83,11 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+      - name: Restore OTel bundles built in checks
+        uses: actions/download-artifact@v4
+        with:
+          name: otel-dist
+          path: observability/dist/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
@@ -80,6 +103,11 @@ jobs:
       DEPLOYED_URL: ${{ needs.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+      - name: Restore OTel bundles for integrity comparison
+        uses: actions/download-artifact@v4
+        with:
+          name: otel-dist
+          path: observability/dist/
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
