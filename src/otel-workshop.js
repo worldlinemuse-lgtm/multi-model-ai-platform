@@ -32,6 +32,7 @@ const OTEL_OPS = Object.freeze({
   'data-analyze': 'workshop.data_analyze',
   'offline-refresh': 'workshop.offline_refresh',
   'storage-check': 'workshop.storage_check',
+  'inference': 'workshop.inference',
 });
 // App reason -> OTel reason (pilot REASONS dictionary). Unknown -> 'unobserved'.
 const OTEL_REASONS = Object.freeze({
@@ -146,6 +147,15 @@ export function attachOtel(base, initialResult = null) {
     }
     return base.record(op, outcome, reason);
   }
+  function event(token, name) {
+    if (!token || typeof name !== 'string') return false;
+    const mirror = active.get(token);
+    const p = parts();
+    if (mirror && mirror.traceToken && p) {
+      try { return p.pilot.event(mirror.traceToken, name); } catch { /* never break the app */ }
+    }
+    return false;
+  }
   function setEnabled(value) {
     otelEnabled = Boolean(value);
     return base.setEnabled(value);
@@ -185,6 +195,7 @@ export function attachOtel(base, initialResult = null) {
     begin,
     finish,
     record,
+    event,
     setEnabled,
     reset,
     setBridge,

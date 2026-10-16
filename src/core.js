@@ -17,7 +17,7 @@ export const PROVIDERS = Object.freeze([
   {id:'huggingface',name:'Hugging Face Inference Providers',model:'',window:'Monthly',transport:'OpenAI-compatible',kind:'key'},
   {id:'aion',name:'Aion Labs Free',model:'aion-labs/aion-3.5',window:'Minute / day',transport:'OpenAI-compatible',kind:'key'}
 ]);
-export const VIEWS = Object.freeze({overview:'Overview',workspace:'Code studio',chat:'Model chat',workflows:'Workflows',knowledge:'Knowledge',datalab:'Data lab',media:'Media tools',providers:'Free providers',vault:'Key vault',usage:'Usage & audit',capabilities:'Capabilities',settings:'Settings'});
+export const VIEWS = Object.freeze({overview:'Overview',workspace:'Code studio',chat:'Model chat',workflows:'Workflows',knowledge:'Knowledge',datalab:'Data lab',media:'Media tools',providers:'Free providers',vault:'Key vault',usage:'Usage & audit',telemetry:'Telemetry',capabilities:'Capabilities',settings:'Settings'});
 export const CAPABILITIES = [
 ['B01','Conversation threads','local','Saved conversation threads with search, user-message editing and export; model replies require an authorized provider route'],
 ['B02','Multi-file IDE','local','Editable source, file explorer, project selection, line numbers and snapshots'],

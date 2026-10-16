@@ -44,7 +44,7 @@ test('trace snapshots contain only fixed fields, never user content', () => {
   const t = m.begin('save');
   m.finish(t, 'error', 'storage-error');
   const snap = m.otelSnapshot();
-  const allowedKeys = new Set(['op', 'outcome', 'reason', 'durationMs', 'traceId', 'spanId', 'parentSpanId']);
+  const allowedKeys = new Set(['op', 'outcome', 'reason', 'durationMs', 'traceId', 'spanId', 'parentSpanId', 'phases']);
   for (const e of snap.events) {
     for (const k of Object.keys(e)) assert.ok(allowedKeys.has(k), 'unexpected field in trace event: ' + k);
     assert.match(e.op, /^workshop\.[a-z_]+$/);

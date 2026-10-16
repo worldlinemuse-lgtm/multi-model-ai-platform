@@ -20,7 +20,7 @@ export function auditTraceFields(metadata={}){
  */
 export const WORKSHOP_OPERATIONS = Object.freeze([
   'boot','code-run','save','preview','project-import','project-export',
-  'storage-check','offline-refresh','ui-error','snapshot','data-analyze'
+  'storage-check','offline-refresh','ui-error','snapshot','data-analyze','inference'
 ]);
 export const WORKSHOP_OUTCOMES = Object.freeze(['ok','error','timeout','cancelled','warning']);
 export const WORKSHOP_REASONS = Object.freeze([

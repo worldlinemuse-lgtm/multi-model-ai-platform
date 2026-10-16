@@ -36,7 +36,7 @@ test('a parent closes all children with non-success and leaves no active spans',
 test('bounded local buffer, no network instrumentation and shutdown rejects new roots',async()=>{
  const api=createLocalOtelPilot();for(let i=0;i<180;i++){api.finish(api.start('workshop.snapshot'));}
  const s=api.snapshot();assert.equal(s.recorded,160);assert.equal(s.discarded,20);
- assert.ok(s.events.every(x=>Object.keys(x).sort().join(',')==='durationMs,op,outcome,parentSpanId,reason,spanId,traceId'));
+ assert.ok(s.events.every(x=>Object.keys(x).sort().join(',')==='durationMs,op,outcome,parentSpanId,phases,reason,spanId,traceId'));
  await api.shutdown();assert.throws(()=>api.start('workshop.snapshot'),/shut down/);
 });
 

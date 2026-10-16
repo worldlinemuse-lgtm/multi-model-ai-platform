@@ -11,7 +11,7 @@ import { TracerProvider, SimpleSpanProcessor, AlwaysOnSampler } from '@opentelem
 const OPERATIONS = Object.freeze([
   'workshop.boot', 'workshop.code_run', 'workshop.project_save', 'workshop.preview',
   'workshop.snapshot', 'workshop.project_import', 'workshop.project_export',
-  'workshop.data_analyze', 'workshop.offline_refresh', 'workshop.storage_check'
+  'workshop.data_analyze', 'workshop.offline_refresh', 'workshop.storage_check','workshop.inference'
 ]);
 const OUTCOMES = Object.freeze(['ok','error','timeout','cancelled','warning','unknown']);
 const REASONS = Object.freeze([
@@ -52,7 +52,8 @@ export class WhitelistMemoryExporter {
           durationMs:durationMs(span),
           traceId:/^[0-9a-f]{32}$/.test(ctx.traceId)?ctx.traceId:null,
           spanId:/^[0-9a-f]{16}$/.test(ctx.spanId)?ctx.spanId:null,
-          parentSpanId:parent&&/^[0-9a-f]{16}$/.test(parent.spanId)?parent.spanId:null
+          parentSpanId:parent&&/^[0-9a-f]{16}$/.test(parent.spanId)?parent.spanId:null,
+          phases:(span.events||[]).map(e=>({name:String(e.name||'').slice(0,64),atMs:durationMs({startTime:e.time,endTime:e.time})})).slice(0,32)
         }));
         if(this.#events.length>LIMIT){this.#events.shift();this.#discarded++;}
       }
@@ -101,7 +102,13 @@ export function createLocalOtelPilot(){
     item.span.end();
     return true;
   }
+  function event(token,name){
+    if(!active.has(token))return false;
+    if(typeof name!=='string'||!name.length||name.length>64)return false;
+    try{active.get(token).span.addEvent(name);}catch{return false;}
+    return true;
+  }
   function snapshot(){return {...exporter.snapshot(),active:active.size,discardedStarts};}
   async function shutdown(){if(closed)return;for(const token of [...active.keys()])finish(token,'unknown','parent-closed');closed=true;await provider.forceFlush();await provider.shutdown();}
-  return Object.freeze({start,finish,snapshot,shutdown,clear:()=>exporter.clear()});
+  return Object.freeze({start,finish,event,snapshot,shutdown,clear:()=>exporter.clear()});
 }
