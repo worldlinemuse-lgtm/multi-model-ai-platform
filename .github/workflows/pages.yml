@@ -132,3 +132,5 @@ jobs:
           python -u tests/python_acceptance.py --base-url "$DEPLOYED_URL"
           python -u tests/q03_site_acceptance.py --base-url "$DEPLOYED_URL"
           python -u tests/new_features_browser.py --base-url "$DEPLOYED_URL"
+      - name: Verify production OpenTelemetry runtime
+        run: python -u tests/otel_workshop_browser.py --base-url "$DEPLOYED_URL"
