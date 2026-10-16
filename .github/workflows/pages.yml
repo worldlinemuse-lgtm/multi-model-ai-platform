@@ -21,11 +21,12 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+      - name: Install pinned OpenTelemetry dependencies for workshop bridge tests
+        run: npm --prefix observability ci --no-audit --no-fund
       - name: Unit and static checks
         run: npm test
       - name: Isolated OpenTelemetry real-SDK checks and browser bundle
         run: |
-          npm --prefix observability ci --no-audit --no-fund
           npm --prefix observability test
           npm --prefix observability run bundle
           test -s observability/dist/otel-local-pilot.js
