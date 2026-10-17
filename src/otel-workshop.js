@@ -232,6 +232,11 @@ export async function otelDiagnosticsText(decorated) {
     `Outcome labels: OK=confirmed success, FAILED=error/timeout, UNKNOWN=finished without a terminal state, ` +
     `NOT OBSERVED=no reason recorded.`
   );
+  lines.push(
+    `Note: the SDK initializes asynchronously without blocking boot. Operations that start before ` +
+    `the SDK reaches READY (including the earliest boot interval) are recorded in workshop counters ` +
+    `but not as OTel spans.`
+  );
   let events = [];
   try {
     const snap = bridge.pilot.snapshot();

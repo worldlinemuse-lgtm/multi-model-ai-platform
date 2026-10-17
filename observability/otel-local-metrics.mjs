@@ -71,7 +71,7 @@ export function createLocalOtelMetrics({clock=()=>performance.now()}={}){
  function summary(){
   return Object.freeze({
    schema:'mm-workshop-otel-metrics-local-v1',scope:'in-memory-only',
-   emittedByProduction:false,active:active.size,rejectedStarts,
+   networkExport:false,active:active.size,rejectedStarts,
    byOperation:OPERATIONS.map(operation=>({operation,...totals.get(operation)}))
   });
  }
