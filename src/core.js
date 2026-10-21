@@ -61,11 +61,11 @@ export const FLOW_TEMPLATES = Object.freeze({
  explain:['Explain concept','Challenge assumptions','Refine explanation']
 });
 export function uid(prefix='id'){return `${prefix}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`;}
-export const clone = value => JSON.parse(JSON.stringify(value));
+export const clone = value => { try{ return JSON.parse(JSON.stringify(value)); }catch{ return null; } };
 export const now = () => new Date().toISOString();
 export const providerById = id => PROVIDERS.find(p=>p.id===id);
 export function safeName(name){return typeof name==='string' && name.length<=100 && /^[\p{L}\p{N}_-][\p{L}\p{N}_.+@ /-]*$/u.test(name) && !name.endsWith('/') && name.split('/').every(part=>part.length>0&&part!=='.'&&part!=='..'&&!part.startsWith('.'));}
-export function safeFiles(files){return files && typeof files==='object'&&!Array.isArray(files) && Object.keys(files).length>0&&Object.keys(files).length<=MAX_FILES&&Object.entries(files).every(([n,v])=>safeName(n)&&typeof v==='string'&&v.length<=MAX_FILE_LENGTH) && Object.values(files).reduce((s,v)=>s+v.length,0)<=MAX_PROJECT_BYTES;}
+export function safeFiles(files){return !!files && typeof files==='object'&&!Array.isArray(files) && Object.keys(files).length>0&&Object.keys(files).length<=MAX_FILES&&Object.entries(files).every(([n,v])=>safeName(n)&&typeof v==='string'&&v.length<=MAX_FILE_LENGTH) && Object.values(files).reduce((s,v)=>s+v.length,0)<=MAX_PROJECT_BYTES;}
 export function starterProject(name='First project'){return {id:uid('project'),name,active:'main.js',updated:now(),files:{'main.js':'// Run with ▶ Run code. This runs in an isolated Web Worker.\nconst message = "Hello from Multi-Model Studio!";\nconsole.log(message);\nconsole.log("2 + 2 =", 2 + 2);','index.html':'<!doctype html>\n<html><head><title>My first preview</title></head><body>\n<h1>Hello from the browser workbench!</h1>\n<p>Edit this file and press Preview HTML.</p>\n<button onclick="document.getElementById(\'result\').textContent = \'It works!\'">Test interaction</button>\n<p id="result"></p>\n</body></html>','style.css':'body { font: 16px system-ui; padding: 28px; color: #1d2b43; }\nh1 { color: #4162c6; }\nbutton { background: #4162c6; color: white; border: 0; padding: 10px; border-radius: 8px; }','hello.py':'print("Python is running inside WebAssembly!")\nprint("2 + 2 =", 2 + 2)'}};}
 import {validateSavedDatasets} from './data-tools.js';
 import {validateSavedWorkflowPlan} from './workflow-plan.js';
@@ -98,6 +98,6 @@ export function historyForRoute(messages,route){
  return messages.filter(m=>m && (m.role==='user'||(m.role==='assistant'&&m.provider===route&&!m.error)))
   .slice(-10).map(m=>({role:m.role,content:m.content}));
 }
-export function migrateLegacy(source){if(!source||!safeFiles(source.files)||!Object.hasOwn(source.files,source.active))throw Error('Cannot migrate invalid legacy project');const state=freshState();state.projects[0].files=clone(source.files);state.projects[0].active=source.active;state.projects[0].name='Recovered B0.2 project';return state;}
+export function migrateLegacy(source){if(!source||!safeFiles(source.files)||!Object.hasOwn(source.files,source.active))throw Error('Cannot migrate invalid legacy project');const state=freshState();const migratedFiles=clone(source.files);if(!migratedFiles)throw Error('Cannot migrate: legacy file data is not serializable');state.projects[0].files=migratedFiles;state.projects[0].active=source.active;state.projects[0].name='Recovered B0.2 project';return state;}
 export function csvSummary(text){const rows=text.trim().split(/\r?\n/).filter(Boolean);if(!rows.length)return 'Empty CSV';return `${rows.length} rows · ${rows[0].split(',').length} columns\nHeaders: ${rows[0].slice(0,400)}`;}
 export function routeDescription(connected){return `${connected} / ${PROVIDERS.length}`;}

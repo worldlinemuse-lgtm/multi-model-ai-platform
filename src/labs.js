@@ -1,8 +1,23 @@
 import {imageGeometry,paintEditedImage} from './image-transform.js';
+import {BrushEngine,DEFAULT_SMOOTHING} from './draw.js';
 import {validateSpeechSettings,chooseVoice} from './speech-settings.js';
 import {MAX_SAVED_DATASETS,MAX_SAVED_DATASET_CHARS,validateSavedDatasets,transformDataset,serializeDataset,groupNumericStats} from './data-tools.js';
 export function parseCSV(text){const rows=[];let row=[],value='',quoted=false;for(let i=0;i<text.length;i++){const c=text[i];if(quoted){if(c==='"'&&text[i+1]==='"'){value+='"';i++;}else if(c==='"')quoted=false;else value+=c;}else if(c==='"')quoted=true;else if(c===','){row.push(value);value='';}else if(c==='\n'){row.push(value.replace(/\r$/,''));if(row.some(x=>x.trim()))rows.push(row);row=[];value='';}else value+=c;}if(quoted)throw Error('Unclosed quoted CSV field');row.push(value.replace(/\r$/,''));if(row.some(x=>x.trim()))rows.push(row);if(!rows.length)throw Error('Empty dataset');const columns=rows.shift().map((x,i)=>x||`Column ${i+1}`);if(columns.length>50||rows.length>3000)throw Error('Limit: 50 columns, 3,000 rows');return {columns,records:rows.map(r=>Object.fromEntries(columns.map((col,i)=>[col,r[i]??''])))};}
-export function parseDataset(text){if(!text||text.length>2_000_000)throw Error('Dataset must be under 2 MB');const t=text.trim();if(t.startsWith('[')||t.startsWith('{')){const v=JSON.parse(t);const arr=Array.isArray(v)?v:Array.isArray(v.data)?v.data:[v];if(arr.length>3000)throw Error('Maximum 3,000 JSON rows');const records=arr.map(x=>typeof x==='object'&&x!==null&&!Array.isArray(x)?x:{value:x});const columns=Array.from(new Set(records.flatMap(x=>Object.keys(x)))).slice(0,50);return {columns,records};}return parseCSV(t);}
+function maxDepth(value,limit=100){
+ // Iterative depth check — recursion here would be the vulnerability.
+ let max=0;const stack=[[value,1]];
+ while(stack.length){
+  const [v,d]=stack.pop();
+  if(d>limit)return d;
+  if(d>max)max=d;
+  if(v&&typeof v==='object'){
+   if(Array.isArray(v)){for(let i=0;i<v.length;i++)stack.push([v[i],d+1]);}
+   else{for(const k of Object.keys(v))stack.push([v[k],d+1]);}
+  }
+ }
+ return max;
+}
+export function parseDataset(text){if(!text||text.length>2_000_000)throw Error('Dataset must be under 2 MB');const t=text.trim();if(t.startsWith('[')||t.startsWith('{')){const v=JSON.parse(t);if(maxDepth(v)>100)throw Error('JSON nesting exceeds 100 levels');const arr=Array.isArray(v)?v:Array.isArray(v.data)?v.data:[v];if(arr.length>3000)throw Error('Maximum 3,000 JSON rows');const records=arr.map(x=>typeof x==='object'&&x!==null&&!Array.isArray(x)?x:{value:x});const columns=Array.from(new Set(records.flatMap(x=>Object.keys(x)))).slice(0,50);return {columns,records};}return parseCSV(t);}
 export function numericValue(value){
  if(value===null||value===undefined||typeof value==='boolean')return null;
  if(typeof value==='string'&&value.trim()==='')return null;
@@ -112,14 +127,130 @@ export function setupLabs({el,toast,download,metrics=null,getDatasets=()=>[],com
  });
  $('data-wasm-test').addEventListener('click',async()=>{try{const bytes=new Uint8Array([0,97,115,109,1,0,0,0,1,7,1,96,2,127,127,1,127,3,2,1,0,7,7,1,3,97,100,100,0,0,10,9,1,7,0,32,0,32,1,106,11]);const instance=await WebAssembly.instantiate(bytes);const sum=instance.instance.exports.add(20,22);$('data-status').textContent=`WebAssembly execution: PASS\n20 + 22 = ${sum}\nNative browser WebAssembly runtime is available.`;toast('WebAssembly test passed.');}catch(e){toast('WebAssembly failed: '+e.message,true)}});
  const canvas=$('media-canvas'),ctx=canvas.getContext('2d');
- function currentFilter(){return `brightness(${$('media-brightness').value}%) contrast(${$('media-contrast').value}%) saturate(${$('media-saturation').value}%)`;}
+ const drawCanvas=$('media-draw-canvas');
+ const brush = drawCanvas ? new BrushEngine(drawCanvas) : null;
+ function syncDrawLayer(){
+  if(!brush||!canvas.width) return;
+  // Match the draw layer to the image canvas pixel size, then position it over the displayed image.
+  if(drawCanvas.width!==canvas.width||drawCanvas.height!==canvas.height) brush.resize(canvas.width,canvas.height);
+  const r=canvas.getBoundingClientRect();
+  drawCanvas.style.width=r.width+'px'; drawCanvas.style.height=r.height+'px';
+ }
+ let activePreset='';
+ // --- Drawing controls ---
+ function canvasPoint(e){
+  const r=drawCanvas.getBoundingClientRect();
+  return { x:(e.clientX-r.left)*(drawCanvas.width/r.width), y:(e.clientY-r.top)*(drawCanvas.height/r.height), p:e.pressure||0.5 };
+ }
+ if(brush){
+  let lastStrokeEnd=null;
+  drawCanvas.addEventListener('pointerdown',e=>{
+   if(!selectedImage) return toast('Load an image first, then draw.',true);
+   const pt=canvasPoint(e);
+   // Alt+click: sample color from the photo (eyedropper).
+   if(e.altKey){
+     try{
+       const sx=Math.max(0,Math.min(canvas.width-1,Math.round(pt.x)));
+       const sy=Math.max(0,Math.min(canvas.height-1,Math.round(pt.y)));
+       const d=ctx.getImageData(sx,sy,1,1).data;
+       const hex='#'+[d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,'0')).join('');
+       brush.color=hex; const cp=$('draw-color'); if(cp) cp.value=hex;
+       toast('Color sampled: '+hex);
+     }catch{ toast('Could not sample color.',true); }
+     return;
+   }
+   drawCanvas.setPointerCapture(e.pointerId);
+   // Shift+click: straight line from end of last stroke.
+   if(e.shiftKey && lastStrokeEnd && !brush.preset.smudge && !brush.preset.blur && !brush.preset.eraser){
+     brush.beginStroke(lastStrokeEnd.x,lastStrokeEnd.y,0.5);
+     const dx=pt.x-lastStrokeEnd.x, dy=pt.y-lastStrokeEnd.y;
+     const dist=Math.hypot(dx,dy), size=brush._size(0.5);
+     const step=Math.max(size*brush.preset.spacing,0.75);
+     const n=Math.max(1,Math.floor(dist/step));
+     for(let i=1;i<=n;i++) brush._dab(lastStrokeEnd.x+dx*(i/n), lastStrokeEnd.y+dy*(i/n), 0.5);
+     brush.endStroke();
+     lastStrokeEnd={x:pt.x,y:pt.y};
+     $('draw-undo-stroke').disabled=false;
+     return;
+   }
+   brush.beginStroke(pt.x,pt.y,pt.p);
+   lastStrokeEnd={x:pt.x,y:pt.y};
+   e.preventDefault();
+  });
+  const brushCursor=$('brush-cursor'), brushRing=brushCursor?.querySelector('.brush-ring');
+  function updateBrushCursor(clientX,clientY){
+   if(!brushCursor||!brushRing||!canvas.width) return;
+   const stack=$('media-canvas-stack');
+   const sr=stack.getBoundingClientRect(), cr=canvas.getBoundingClientRect();
+   const scale=cr.width/canvas.width;
+   const d=Math.max(6, brush.cursorSize()*scale);
+   brushRing.style.width=d+'px'; brushRing.style.height=d+'px';
+   brushRing.classList.toggle('soft', brush.preset.tip==='soft');
+   brushCursor.style.display='block';
+   brushCursor.style.left=(clientX-sr.left)+'px';
+   brushCursor.style.top=(clientY-sr.top)+'px';
+  }
+  drawCanvas.addEventListener('pointermove',e=>{
+   updateBrushCursor(e.clientX,e.clientY);
+   if(!brush.drawing) return;
+   const pt=canvasPoint(e); brush.moveStroke(pt.x,pt.y,pt.p);
+   e.preventDefault();
+  });
+  drawCanvas.addEventListener('pointerleave',()=>{ if(brushCursor) brushCursor.style.display='none'; });
+  for(const ev of ['pointerup','pointercancel']) drawCanvas.addEventListener(ev,e=>{
+   if(!brush.drawing) return;
+   const pt=canvasPoint(e); lastStrokeEnd={x:pt.x,y:pt.y};
+   brush.endStroke(); $('draw-undo-stroke').disabled = brush.strokes.length===0;
+  });
+  for(const b of document.querySelectorAll('#draw-presets .preset-btn')) b.addEventListener('click',()=>{
+   brush.setPreset(b.dataset.brush);
+   for(const x of document.querySelectorAll('#draw-presets .preset-btn')) x.classList.toggle('active',x===b);
+  });
+  $('draw-color')?.addEventListener('input',e=>{ brush.color=e.target.value; });
+  $('draw-size')?.addEventListener('input',e=>{ brush.size=Number(e.target.value); $('draw-size-val').textContent=e.target.value; });
+  $('draw-opacity')?.addEventListener('input',e=>{ brush.opacity=Number(e.target.value)/100; $('draw-opacity-val').textContent=e.target.value; });
+  $('draw-blend')?.addEventListener('change',e=>{ brush.blendMode=e.target.value; });
+  // Smudge samples the photo canvas under each dab.
+  brush.sampleSource = canvas;
+  $('draw-smoothing')?.addEventListener('change',e=>{
+   const def = DEFAULT_SMOOTHING[brush.preset.name] ?? 0.3;
+   brush.preset = {...brush.preset, smoothing: e.target.checked ? def : 0};
+  });
+  $('draw-undo-stroke')?.addEventListener('click',()=>{
+   if(brush.undo()){ $('draw-undo-stroke').disabled = brush.strokes.length===0; }
+  });
+  $('draw-clear')?.addEventListener('click',()=>{
+   brush.clear(); $('draw-undo-stroke').disabled = brush.strokes.length===0; toast('Drawing cleared.');
+  });
+  // Photoshop-style shortcuts: [ ] brush size, 1..0 opacity. Active when the media
+  // view is shown and focus isn't in a text field.
+  document.addEventListener('keydown',e=>{
+   if($('view-media')?.hidden) return;
+   const t=e.target;
+   if(t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable)) return;
+   if(e.key==='['||e.key===']'){
+     const sz=$('draw-size'); if(!sz) return;
+     sz.value=Math.max(1,Math.min(120,Number(sz.value)+(e.key===']'?2:-2)));
+     sz.dispatchEvent(new Event('input'));
+     e.preventDefault();
+   } else if(/^[0-9]$/.test(e.key)){
+     const op=$('draw-opacity'); if(!op) return;
+     op.value=e.key==='0'?100:Number(e.key)*10;
+     op.dispatchEvent(new Event('input'));
+     e.preventDefault();
+   }
+  });
+ }
+function currentFilter(){const blur=Number($('media-blur')?.value||0);let f=`brightness(${$('media-brightness').value}%) contrast(${$('media-contrast').value}%) saturate(${$('media-saturation').value}%)`;if(blur>0)f+=` blur(${blur}px)`;if(activePreset)f+=` ${activePreset}`;return f;}
  function editOptions(original=false){return {rotation,cropPercent,original};}
  function renderImageTo(outCtx,original=false){return paintEditedImage(outCtx,selectedImage,editOptions(original),currentFilter());}
  function redrawImage(){
   if(!selectedImage)return;
   try{
    const spec=renderImageTo(ctx);
+   syncDrawLayer();
    $('media-resolution-status').textContent=`Preview: ${spec.width} × ${spec.height}px · Original: ${selectedImage.naturalWidth} × ${selectedImage.naturalHeight}px · Cropped source: ${spec.sw} × ${spec.sh}px · Export at ${$('media-original-resolution').checked?'original':'preview'} resolution · Rotation: ${rotation}°.`;
+   if($('media-vignette')?.checked){const w=canvas.width,h=canvas.height;const g=ctx.createRadialGradient(w/2,h/2,Math.min(w,h)*0.35,w/2,h/2,Math.max(w,h)*0.75);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,0.55)');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);}
    $('media-undo').disabled=imageUndo.length===0;
   }catch(error){$('media-resolution-status').textContent='Image update failed: '+String(error?.message||error);toast('Image update rejected.',true);}
  }
@@ -131,12 +262,18 @@ export function setupLabs({el,toast,download,metrics=null,getDatasets=()=>[],com
   img.onload=()=>{
    URL.revokeObjectURL(url);
    try{imageGeometry(img.naturalWidth,img.naturalHeight,{original:true});}catch(error){return toast('Image rejected: '+String(error?.message||error),true);}
-   selectedImage=img;rotation=0;cropPercent=0;imageUndo=[];$('media-crop').value=0;redrawImage();toast('Image loaded locally.');
+   selectedImage=img;rotation=0;cropPercent=0;imageUndo=[];$('media-crop').value=0;
+   if(brush){ brush.ctx.clearRect(0,0,drawCanvas.width,drawCanvas.height); brush.strokes=[]; brush.dabCount=0; const ub=$('draw-undo-stroke'); if(ub) ub.disabled=true; }
+   redrawImage();toast('Image loaded locally.');
   };
   img.onerror=()=>{URL.revokeObjectURL(url);toast('Unable to read image.',true)};
   img.src=url;
  });
- for(const id of ['media-brightness','media-contrast','media-saturation'])$(id).addEventListener('input',redrawImage);
+ for(const id of ['media-brightness','media-contrast','media-saturation','media-blur'])$(id)?.addEventListener('input',redrawImage);
+$('media-vignette')?.addEventListener('change',redrawImage);
+for(const b of document.querySelectorAll('#media-presets .preset-btn'))b.addEventListener('click',()=>{activePreset=b.dataset.preset;for(const x of document.querySelectorAll('#media-presets .preset-btn'))x.classList.toggle('active',x===b);redrawImage();});
+const cmp=$('media-compare');
+if(cmp){const showOrig=on=>{if(!selectedImage)return;try{if(on){const keep=ctx.filter;ctx.filter='none';paintEditedImage(ctx,selectedImage,{rotation:0,cropPercent:0,original:false},'brightness(100%) contrast(100%) saturate(100%)');ctx.filter=keep;}else redrawImage();}catch{}};cmp.addEventListener('pointerdown',()=>showOrig(true));for(const ev of ['pointerup','pointerleave','pointercancel'])cmp.addEventListener(ev,()=>showOrig(false));}
  $('media-crop').addEventListener('change',()=>{
   if(!selectedImage)return;
   const desired=Number($('media-crop').value);
@@ -152,8 +289,9 @@ export function setupLabs({el,toast,download,metrics=null,getDatasets=()=>[],com
  $('media-reset').addEventListener('click',()=>{
   if(selectedImage)saveImageStep();
   rotation=0;cropPercent=0;$('media-crop').value=0;
+  if(brush){ brush.ctx.clearRect(0,0,drawCanvas.width,drawCanvas.height); brush.strokes=[]; brush.dabCount=0; const ub=$('draw-undo-stroke'); if(ub) ub.disabled=true; }
   for(const id of ['media-brightness','media-contrast','media-saturation'])$(id).value=100;
-  redrawImage();
+  activePreset='';for(const x of document.querySelectorAll('#media-presets .preset-btn'))x.classList.toggle('active',x.dataset.preset==='');const bl=$('media-blur');if(bl)bl.value=0;const vg=$('media-vignette');if(vg)vg.checked=false;redrawImage();
  });
  $('media-original-resolution').addEventListener('change',redrawImage);
  $('media-download').addEventListener('click',()=>{
@@ -164,6 +302,20 @@ export function setupLabs({el,toast,download,metrics=null,getDatasets=()=>[],com
    const outCtx=output.getContext('2d');if(!outCtx)return toast('Cannot allocate full-resolution export.',true);
    try{renderImageTo(outCtx,true);}catch(error){return toast('Image export blocked: '+String(error?.message||error),true);}
   }
+  // Composite the drawing layer onto the export.
+  if(brush && drawCanvas.width>0){
+   const hasDrawing = brush.dabCount>0 || brush.strokes.length>0;
+   if(hasDrawing){
+    if(output===canvas){
+     output=document.createElement('canvas');
+     output.width=canvas.width; output.height=canvas.height;
+     output.getContext('2d').drawImage(canvas,0,0);
+    }
+    const octx=output.getContext('2d');
+    // Scale drawing to output size (matches preview unless original-res export).
+    octx.drawImage(drawCanvas,0,0,output.width,output.height);
+   }
+  }
   output.toBlob(blob=>{if(blob)download('edited-image.png',blob,'image/png');else toast('Image export failed: try preview-size export.',true);},'image/png');
  });
  const voices=$('speech-voice'),rate=$('speech-rate'),pitch=$('speech-pitch');
@@ -172,7 +324,8 @@ export function setupLabs({el,toast,download,metrics=null,getDatasets=()=>[],com
   const keep=voices.value;voices.replaceChildren(new Option('Browser default',''));
   if(!('speechSynthesis' in window)){$('speech-voices-status').textContent='Speech synthesis unavailable.';return;}
   const list=speechSynthesis.getVoices();
-  for(const v of list)voices.add(new Option(v.name+' ('+v.lang+')',v.voiceURI));
+  const byLang={};for(const v of list){const l=(v.lang||'unknown').split('-')[0];(byLang[l]=byLang[l]||[]).push(v);}
+  for(const l of Object.keys(byLang).sort()){const grp=document.createElement('optgroup');grp.label=l.toUpperCase();for(const v of byLang[l])grp.append(new Option(v.name+(v.localService?' · local':' · network'),v.voiceURI));voices.add(grp);}
   if([...voices.options].some(o=>o.value===keep))voices.value=keep;
   $('speech-voices-status').textContent=list.length+' browser-reported voice(s). Availability and privacy depend on your browser.';
  }
@@ -188,15 +341,19 @@ export function setupLabs({el,toast,download,metrics=null,getDatasets=()=>[],com
   if(options.voiceURI&&!chosen)return toast('Selected browser voice is no longer available.',true);
   speechSynthesis.cancel();
   const utterance=new SpeechSynthesisUtterance(text.slice(0,2000));utterance.rate=options.rate;utterance.pitch=options.pitch;if(chosen)utterance.voice=chosen;
-  utterance.onend=()=>$('speech-status').textContent='Finished speaking.';
-  utterance.onerror=e=>$('speech-status').textContent='Speech error: '+String(e.error||'unknown');
-  speechSynthesis.speak(utterance);$('speech-status').textContent='Speaking through '+(chosen?.name||'browser default voice')+'…';
+  const ta=$('speech-text');let hl=null;
+  utterance.onboundary=e=>{if(e.charIndex==null||!ta)return;try{if(!hl){hl=document.createElement('div');hl.id='speech-highlight';ta.parentNode.insertBefore(hl,ta);hl.style.cssText='position:absolute;inset:0;pointer-events:none;font:inherit;padding:10px 12px;white-space:pre-wrap;word-break:break-word;color:transparent';ta.parentNode.style.position='relative';}const text=ta.value;const before=text.slice(0,e.charIndex);const word=text.slice(e.charIndex,e.charIndex+(e.charLength||1));const after=text.slice(e.charIndex+(e.charLength||1));hl.innerHTML='';hl.append(document.createTextNode(before));const mark=document.createElement('mark');mark.style.background='#75d8f555';mark.textContent=word;hl.append(mark);hl.append(document.createTextNode(after));}catch{}};
+  const clearHl=()=>{if(hl){hl.remove();hl=null;}};
+  utterance.onend=()=>{clearHl();$('speech-status').textContent='Finished speaking.';};
+  utterance.onerror=e=>{clearHl();$('speech-status').textContent='Speech error: '+String(e.error||'unknown');};
+  speechSynthesis.speak(utterance);$('speech-status').textContent='Speaking through '+(chosen?.name||'browser default voice')+' — words highlight as spoken.';
  });
  $('speech-stop').addEventListener('click',()=>{
   if('speechSynthesis' in window)speechSynthesis.cancel();
   if(activeRecognition){const instance=activeRecognition;activeRecognition=null;try{instance.stop();}catch(error){console.warn('Unable to stop recognition:',error);}}
   $('speech-status').textContent='Speech and dictation stopped.';
  });
+ if(!window.SpeechRecognition&&!window.webkitSpeechRecognition){const db=$('speech-dictate');if(db){db.disabled=true;db.title='Dictation is not supported in this browser. Try Chrome or Edge.';}}
  $('speech-dictate').addEventListener('click',()=>{
  if(activeRecognition)return toast('Dictation is already active; use Stop speech / dictation.',true);
  const SpeechRec=window.SpeechRecognition||window.webkitSpeechRecognition;
