@@ -52,4 +52,15 @@ while _i<_n:
 for _s in _st:_errs.append(f"unclosed '{{' at line {_ln[_s]} — block header '{_hdr(_s)}'")
 assert not _errs,'styles.css brace imbalance: '+'; '.join(_errs)
 print('PASS CSS: styles.css braces balanced')
+# Draw-layer anchor: #media-draw-canvas is position:absolute with inset:0, so
+# its containing block MUST be .image-canvas-wrap. Without position:relative
+# on the wrap the canvas centers on the initial containing block and floats
+# invisibly over the workbench controls — on phone viewports it covered the
+# "Select an image" button exactly, swallowing every tap into the draw
+# guard's "Load an image first" toast (production incident, 2026-10-22).
+_wrap=re.search(r'\.image-canvas-wrap\{([^}]*)\}',_css)
+assert _wrap and 'position:relative' in _wrap.group(1),'.image-canvas-wrap must declare position:relative (anchor for the absolute #media-draw-canvas overlay)'
+_draw=re.search(r'#media-draw-canvas\{([^}]*position:absolute[^}]*)\}',_css)
+assert _draw,'#media-draw-canvas absolute overlay rule missing (guard context changed; re-check the anchor invariant)'
+print('PASS CSS: draw canvas anchored to .image-canvas-wrap (position:relative)')
 print(f'PASS HTML: {len(p.ids)} unique controls; {len(p.screen)} wired sections; module files, CSP guards, vault encryption and ZIP bounds found')
