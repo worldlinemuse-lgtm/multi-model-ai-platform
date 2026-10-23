@@ -85,12 +85,16 @@ def main():
                 page.wait_for_timeout(200)
 
             checkpoint('every view fits the phone viewport (no sideways page scroll)')
+            overflowing = []
             for view in views:
                 open_view(view)
                 overflow = page.evaluate(
                     "Math.max(document.documentElement.scrollWidth, document.body.scrollWidth)"
                     " - window.innerWidth")
-                assert overflow <= 1, f'view {view} overflows sideways by {overflow}px at 360px wide'
+                if overflow > 1:
+                    overflowing.append(f'{view} +{overflow}px')
+            assert not overflowing, \
+                'views overflowing sideways at 360px wide: ' + ', '.join(overflowing)
 
             checkpoint('media: Select button is the topmost element at its own center')
             open_view('media')
