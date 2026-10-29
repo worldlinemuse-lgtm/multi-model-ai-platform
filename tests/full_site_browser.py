@@ -759,7 +759,7 @@ def check_chat_persist_before_dispatch(p):
         p.locator('#chat-input').fill('QA persist-before-dispatch order message')
         p.locator('#send-chat').click()
     saved=p.evaluate("""async () => {
-      const db=await new Promise((res,rej)=>{const r=indexedDB.open('mm-studio-lab-b03');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});
+      const db=await new Promise((res,rej)=>{const r=indexedDB.open('mm-studio-b03');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});
       const st=await new Promise((res,rej)=>{const tx=db.transaction('kv','readonly');const q=tx.objectStore('kv').get('state.v1');q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});
       const t=st.threads.find(x=>x.id===st.activeThreadId);
       return t.messages.some(m=>m.role==='user'&&m.content.includes('QA persist-before-dispatch order message'));
