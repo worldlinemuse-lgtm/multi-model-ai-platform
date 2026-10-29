@@ -265,7 +265,9 @@ def check_chat(p):
     p.locator('#clear-chat').click()
     verify(p.locator('#chat-messages .bubble').count()==0,'Clear conversation failed')
     screen(p,'usage')
-    verify(int(p.locator('#usage-total').inner_text())>=2,'Model request audit not counted')
+    # One logical request counts once (2026-10-26 audit fix): the old >=2
+    # threshold encoded the double count (requested + terminal event).
+    verify(int(p.locator('#usage-total').inner_text())>=1,'Model request audit not counted')
     with p.expect_download() as obj:p.locator('#export-audit').click()
     audit=json.loads(Path(obj.value.path()).read_text())
     verify(any(e['status']=='success' for e in audit),'Audit export contains no successful request')
@@ -279,6 +281,34 @@ def check_chat(p):
     approve(p)
     p.locator('#clear-audit').click()
     verify(p.locator('#usage-total').inner_text()=='0','Clear audit failed')
+def check_chat_retry_no_duplicate(p):
+    setup_vault(p)
+    screen(p,'chat')
+    p.locator('#chat-route').select_option('groq')
+    def fail_groq(route):
+        if route.request.method=='OPTIONS':
+            route.fulfill(status=204,headers={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'*','Access-Control-Allow-Methods':'POST, OPTIONS'})
+        else:
+            route.fulfill(status=500,headers={'Content-Type':'application/json','Access-Control-Allow-Origin':'*'},body=json.dumps({'error':{'message':'synthetic failure'}}))
+    p.route('https://api.groq.com/**',fail_groq)
+    p.locator('#chat-input').fill('QA retry-no-duplicate message')
+    p.locator('#send-chat').click()
+    p.wait_for_function("document.querySelectorAll('#chat-messages .bubble.error').length>=1",timeout=20000)
+    verify(p.locator('#chat-input').input_value()=='','Failed prompt was restored into the input')
+    verify(p.locator('#chat-messages .bubble.user').count()==1,'User message duplicated or missing after failure')
+    p.once('dialog',lambda d:d.accept())
+    p.locator('#chat-retry-draft').click()
+    verify(p.locator('#chat-input').input_value()=='QA retry-no-duplicate message','Retry draft did not prepare the prompt')
+    verify(p.locator('#chat-messages .bubble.user').count()==1,'Retry draft sent instead of preparing')
+    p.locator('#new-chat').click()
+    p.route('https://api.groq.com/**',lambda route: None)
+    p.locator('#chat-input').fill('QA stopped message')
+    p.locator('#send-chat').click()
+    p.wait_for_timeout(800)
+    p.locator('#stop-chat').click()
+    p.wait_for_function("document.querySelectorAll('#chat-messages .bubble.error').length>=1",timeout=20000)
+    verify(p.locator('#chat-input').input_value()=='','Stopped prompt was restored into the input')
+    verify(p.locator('#chat-messages .bubble.user').count()==1,'Stopped request duplicated the user message')
 def check_chat_management(p):
     mock_provider(p)
     setup_vault(p)
@@ -715,6 +745,198 @@ def check_local_connection_diagnostics_and_manual_retry(p):
     verify(p.locator('#chat-input').input_value()=='Q22 manual retry prompt only','Q22 original failed message was not restored')
     verify(len(requests)==1,'Q22 preparing retry must never send another request')
 
+def check_chat_persist_before_dispatch(p):
+    mock_provider(p)
+    setup_vault(p)
+    screen(p,'chat')
+    p.locator('#chat-route').select_option('groq')
+    # Order: the prompt must already be durable when the first provider
+    # request is observed. With the old debounced-only save, the prompt
+    # would still be in memory at this point (the 300 ms timer has not
+    # fired), so this assertion fails on the old code and passes on the
+    # persist-before-dispatch code.
+    with p.expect_request('https://api.groq.com/**'):
+        p.locator('#chat-input').fill('QA persist-before-dispatch order message')
+        p.locator('#send-chat').click()
+    saved=p.evaluate("""async () => {
+      const db=await new Promise((res,rej)=>{const r=indexedDB.open('mm-studio-b03');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});
+      const st=await new Promise((res,rej)=>{const tx=db.transaction('kv','readonly');const q=tx.objectStore('kv').get('state.v1');q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});
+      const t=st.threads.find(x=>x.id===st.activeThreadId);
+      return t.messages.some(m=>m.role==='user'&&m.content.includes('QA persist-before-dispatch order message'));
+    }""")
+    verify(saved,'Prompt was not durable in storage when the provider request was observed')
+    p.wait_for_function("document.querySelector('#chat-messages').textContent.includes('SYNTHETIC ACCEPTANCE RESPONSE')",timeout=12000)
+    # Compare mode still sends on both routes under the same single save.
+    screen(p,'vault')
+    p.locator('#key-provider').select_option('openrouter')
+    p.locator('#key-model').fill('openrouter/free')
+    p.locator('#key-value').fill('TEST-FAKE-NOT-A-REAL-API-KEY-2')
+    p.locator('#key-attest').check()
+    p.locator('#save-key').click()
+    p.wait_for_function("document.querySelector('#vault-items').textContent.toLowerCase().includes('openrouter')",timeout=15000)
+    p.route('https://openrouter.ai/**',fake_groq)
+    screen(p,'chat')
+    p.locator('#new-chat').click()
+    p.locator('#compare-mode').check()
+    p.locator('#chat-route').select_option('groq')
+    p.locator('#compare-route').select_option('openrouter')
+    p.locator('#chat-input').fill('QA persist compare message')
+    p.locator('#send-chat').click()
+    p.wait_for_function("document.querySelectorAll('#chat-messages .bubble.assistant').length>=2",timeout=20000)
+    verify(p.locator('#chat-messages .bubble.user').count()==1,'Compare send duplicated the user message')
+    # Failure injection: with readwrite transactions broken, the send must
+    # never dispatch, the prompt must return to the input, and no phantom
+    # user message may remain in the thread. Fresh context for isolation.
+    base=p.url.split('#')[0]
+    ctx2=p.context.browser.new_context(viewport={'width':1360,'height':860})
+    p2=ctx2.new_page()
+    errors2=[]
+    p2.on('pageerror',lambda e:errors2.append(str(e)))
+    p2.add_init_script("""(()=>{const orig=IDBDatabase.prototype.transaction;IDBDatabase.prototype.transaction=function(names,mode,...rest){if(mode==='readwrite'&&window.__breakWrites)throw new Error('synthetic storage failure');return orig.call(this,names,mode,...rest);};})();""")
+    p2.goto(base,timeout=25000)
+    p2.locator('#view-overview h1').wait_for(timeout=16000)
+    hits=[]
+    def counting(route):
+        if route.request.method!='OPTIONS':hits.append(1)
+        fake_groq(route)
+    p2.route('https://api.groq.com/**',counting)
+    setup_vault(p2)
+    screen(p2,'chat')
+    p2.locator('#chat-route').select_option('groq')
+    p2.locator('#chat-input').fill('QA persist baseline')
+    p2.locator('#send-chat').click()
+    p2.wait_for_function("document.querySelector('#chat-messages').textContent.includes('SYNTHETIC ACCEPTANCE RESPONSE')",timeout=12000)
+    before=len(hits)
+    p2.evaluate("window.__breakWrites=true")
+    p2.locator('#chat-input').fill('QA persist-failure message')
+    p2.locator('#send-chat').click()
+    p2.wait_for_function("document.querySelector('#toast').textContent.includes('not sent')",timeout=10000)
+    verify(p2.locator('#chat-input').input_value()=='QA persist-failure message','Failed save did not restore the prompt to the input')
+    verify(p2.locator('#send-chat').is_enabled(),'Send was not left enabled after the failed save')
+    verify(len(hits)==before,'Provider was called despite the failed save')
+    verify(p2.locator('#chat-messages .bubble.user').count()==1,'Failed save left a phantom user message in the thread')
+    verify(p2.locator('#save-indicator').inner_text().startswith('Save failed'),'Save indicator did not report the failure')
+    verify(not errors2,'Page errors on the failure-injection page: '+str(errors2))
+    ctx2.close()
+def check_vault_commit_before_adopt(p):
+    # Re-audit item 4: vault mutations must commit before they are adopted.
+    # With readwrite transactions broken, create/put/drop/erase must leave
+    # both the in-memory vault and durable storage exactly as they were:
+    # no phantom entries, no resurrected deletions, no phantom vault.
+    # Each phase breaks with its own message so a toast wait cannot pass
+    # vacuously off an earlier phase's toast.
+    base=p.url.split('#')[0]
+    ctx=p.context.browser.new_context(viewport={'width':1360,'height':860})
+    q=ctx.new_page()
+    errors=[]
+    q.on('pageerror',lambda e:errors.append(str(e)))
+    q.add_init_script("""(()=>{const orig=IDBDatabase.prototype.transaction;IDBDatabase.prototype.transaction=function(names,mode,...rest){if(mode==='readwrite'&&window.__breakWrites)throw new Error(window.__breakMessage||'synthetic storage failure');return orig.call(this,names,mode,...rest);};})();""")
+    q.goto(base,timeout=25000)
+    q.locator('#view-overview h1').wait_for(timeout=16000)
+    # Create failure: no phantom unlocked vault. Switching views re-renders
+    # from memory, so a half-adopted create would show UNLOCKED here.
+    q.evaluate("window.__breakWrites=true;window.__breakMessage='synthetic vault-create failure'")
+    screen(q,'vault')
+    q.locator('#vault-password').fill('test-only-vault-passphrase-2026')
+    q.locator('#vault-submit').click()
+    q.wait_for_function("document.querySelector('#toast').textContent.includes('synthetic vault-create failure')",timeout=10000)
+    screen(q,'overview')
+    screen(q,'vault')
+    verify(q.locator('#vault-status').inner_text()=='NOT CREATED','Failed vault create left a phantom vault')
+    # Real vault first, then break writes mid-session.
+    q.evaluate("window.__breakWrites=false")
+    setup_vault(q)
+    # Put failure: no phantom entry in memory, none durable either.
+    q.locator('#key-provider').select_option('openrouter')
+    q.locator('#key-model').fill('openrouter/free')
+    q.locator('#key-value').fill('TEST-FAKE-NOT-A-REAL-API-KEY-2')
+    q.locator('#key-attest').check()
+    q.evaluate("window.__breakWrites=true;window.__breakMessage='synthetic key-save failure'")
+    q.locator('#save-key').click()
+    q.wait_for_function("document.querySelector('#toast').textContent.includes('synthetic key-save failure')",timeout=10000)
+    screen(q,'overview')
+    screen(q,'vault')
+    verify('openrouter' not in q.locator('#vault-items').inner_text().lower(),'Failed key save left a phantom entry')
+    # Drop failure: the entry stays listed.
+    q.on('dialog',lambda d:d.accept())
+    q.evaluate("window.__breakMessage='synthetic key-remove failure'")
+    q.locator('#vault-items .vault-item button').first.click()
+    q.wait_for_function("document.querySelector('#toast').textContent.includes('synthetic key-remove failure')",timeout=10000)
+    screen(q,'overview')
+    screen(q,'vault')
+    verify('GroqCloud' in q.locator('#vault-items').inner_text(),'Failed key removal dropped the entry from memory')
+    # Erase failure: the vault stays unlocked with its keys.
+    q.evaluate("window.__breakMessage='synthetic vault-wipe failure'")
+    q.locator('#vault-wipe').click()
+    q.wait_for_function("document.querySelector('#toast').textContent.includes('synthetic vault-wipe failure')",timeout=10000)
+    screen(q,'overview')
+    screen(q,'vault')
+    verify(q.locator('#vault-status').inner_text()=='UNLOCKED','Failed vault wipe locked or erased the vault')
+    verify('GroqCloud' in q.locator('#vault-items').inner_text(),'Failed vault wipe lost the keys')
+    # Durable proof: writes back on, lock + unlock round-trips the ORIGINAL
+    # vault only — groq present, no phantom openrouter key.
+    q.evaluate("window.__breakWrites=false")
+    q.locator('#vault-lock').click()
+    q.wait_for_function("document.querySelector('#vault-status').textContent==='LOCKED'")
+    q.locator('#vault-password').fill('test-only-vault-passphrase-2026')
+    q.locator('#vault-submit').click()
+    q.wait_for_function("document.querySelector('#vault-status').textContent==='UNLOCKED'",timeout=15000)
+    items=q.locator('#vault-items').inner_text()
+    verify('GroqCloud' in items,'Groq key did not survive the failed-drop round-trip')
+    verify('openrouter' not in items.lower(),'Phantom openrouter key became durable after the failed save')
+    verify(not errors,'Page errors on the vault failure-injection page: '+str(errors))
+    ctx.close()
+def check_chat_double_submit_guard(p):
+    # Re-audit P0-1: two submits during the persist-before-dispatch save
+    # must produce one user message and one provider request, and a failed
+    # save with a second submit attempt must roll back exactly the failed
+    # message. The save is stretched by delaying the transaction's
+    # oncomplete handler, which delays saveNow's resolution without
+    # breaking the commit itself. The rejection toast is the vacuity
+    # guard: it only appears if the second submit actually landed while
+    # the first save was still pending.
+    base=p.url.split('#')[0]
+    ctx=p.context.browser.new_context(viewport={'width':1360,'height':860})
+    q=ctx.new_page()
+    errors=[]
+    q.on('pageerror',lambda e:errors.append(str(e)))
+    q.add_init_script("""(()=>{const orig=IDBDatabase.prototype.transaction;IDBDatabase.prototype.transaction=function(...a){if(a[1]==='readwrite'&&window.__breakWrites)throw new Error(window.__breakMessage||'synthetic storage failure');const tx=orig.apply(this,a);if(a[1]==='readwrite'&&window.__delayWrites){let h=null;try{Object.defineProperty(tx,'oncomplete',{configurable:true,set(v){h=v;},get(){return h;}});}catch(e){}tx.addEventListener('complete',()=>{setTimeout(()=>{if(h)h.call(tx,new Event('complete'));},window.__delayMs||1500);});}return tx;};})();""")
+    q.goto(base,timeout=25000)
+    q.locator('#view-overview h1').wait_for(timeout=16000)
+    hits=[]
+    def counting(route):
+        if route.request.method!='OPTIONS':hits.append(1)
+        fake_groq(route)
+    q.route('https://api.groq.com/**',counting)
+    setup_vault(q)
+    screen(q,'chat')
+    q.locator('#chat-route').select_option('groq')
+    # Double submit inside one stretched save: one message, one request.
+    q.evaluate("window.__delayWrites=true;window.__delayMs=1500")
+    q.locator('#chat-input').fill('QA double-submit guard message')
+    q.locator('#send-chat').click()
+    q.evaluate("document.querySelector('#chat-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))")
+    q.wait_for_function("document.querySelector('#toast').textContent.includes('already in progress')",timeout=10000)
+    q.wait_for_function("document.querySelector('#chat-messages').textContent.includes('SYNTHETIC ACCEPTANCE RESPONSE')",timeout=20000)
+    verify(q.locator('#chat-messages .bubble.user').count()==1,'Double submit recorded two user messages')
+    verify(len(hits)==1,'Double submit dispatched two provider requests')
+    verify(q.locator('#send-chat').is_enabled(),'Send was not re-enabled after the guarded send')
+    # Let the response's debounced save settle before breaking writes.
+    q.evaluate("window.__delayWrites=false")
+    q.wait_for_timeout(800)
+    # Failed save plus a second submit attempt: the thread keeps exactly
+    # its one prior user message, the prompt returns, nothing dispatches.
+    q.evaluate("window.__breakWrites=true;window.__breakMessage='synthetic chat-save failure'")
+    q.locator('#chat-input').fill('QA failed-save guard message')
+    q.locator('#send-chat').click()
+    q.evaluate("document.querySelector('#chat-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))")
+    q.wait_for_function("document.querySelector('#toast').textContent.includes('not sent')",timeout=10000)
+    verify(q.locator('#chat-messages .bubble.user').count()==1,'Failed save rollback removed the wrong message')
+    verify(q.locator('#chat-input').input_value()=='QA failed-save guard message','Failed save did not restore the prompt')
+    verify(q.locator('#send-chat').is_enabled(),'Send was not re-enabled after the failed save')
+    verify(len(hits)==1,'Provider was called despite the failed save')
+    verify(not errors,'Page errors on the chat concurrency page: '+str(errors))
+    ctx.close()
 CASES=[
  ('12-screen navigation and command palette',check_navigation),
  ('Workspace projects, files, runner, snapshots, JSON ZIP and import/export',check_workspace),
@@ -727,7 +949,11 @@ CASES=[
  ('Q26 validated local provider presets without network calls',check_q26_provider_model_presets),
  ('Vault locked typing, encryption, persistence, wrong password, removal and wipe',check_vault),
  ('Q21 encrypted vault export/import and passphrase rotation',check_vault_portability),
+ ('Vault mutations commit before adoption under storage failure',check_vault_commit_before_adopt),
  ('Mocked API adapter through chat, history, audit and export',check_chat),
+ ('Failed and stopped chat requests do not restore the prompt or duplicate the message',check_chat_retry_no_duplicate),
+ ('Chat prompt persists before provider dispatch, compare send, failed-save gate',check_chat_persist_before_dispatch),
+ ('Chat double submit during save is guarded, failed save rolls back exactly',check_chat_double_submit_guard),
  ('Q22 network-free diagnostics and manual retry draft',check_local_connection_diagnostics_and_manual_retry),
  ('P14 local conversation search edit export delete',check_chat_management),
  ('Mocked three-stage workflow and stage cap',check_workflows),

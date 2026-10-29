@@ -17,7 +17,8 @@ const OUTCOMES = Object.freeze(['ok','error','timeout','cancelled','warning','un
 const REASONS = Object.freeze([
   'none','invalid-input','worker-failed','runtime-failed','time-limit',
   'user-stop','superseded','parent-closed','storage-failed',
-  'offline-unavailable','resource-limit','unsupported','unobserved'
+  'offline-unavailable','resource-limit','unsupported','unobserved',
+  'clone-failed','restore-failed'
 ]);
 const isAllowed=(value,items,name)=>{if(typeof value!=='string'||!items.includes(value))throw TypeError('Invalid '+name);return value;};
 const LIMIT=160;
@@ -28,6 +29,20 @@ function durationMs(span){
   if(!Array.isArray(pair)||pair.length!==2)return null;
   const n=Math.floor(pair[0]*1000+pair[1]/1e6);
   return Number.isFinite(n)?Math.max(0,Math.min(MAX_MS,n)):null;
+}
+// OTel HrTime is a [seconds, nanoseconds] pair. Phase timing is an event's
+// offset from its span's start, not a span duration: the old code fed
+// {startTime, endTime} into durationMs, which reads span.duration, so every
+// phase atMs came out null. (2026-10-26 audit fix.)
+function hrTimeMs(t){
+  if(!Array.isArray(t)||t.length!==2)return null;
+  const n=Math.floor(t[0]*1000+t[1]/1e6);
+  return Number.isFinite(n)?n:null;
+}
+function phaseAtMs(span,event){
+  const start=hrTimeMs(span.startTime),at=hrTimeMs(event.time);
+  if(start==null||at==null)return null;
+  return Math.max(0,Math.min(MAX_MS,at-start));
 }
 
 /** Exporter only retains fixed, content-free projection of our own spans, never ReadableSpan objects. */
@@ -53,7 +68,7 @@ export class WhitelistMemoryExporter {
           traceId:/^[0-9a-f]{32}$/.test(ctx.traceId)?ctx.traceId:null,
           spanId:/^[0-9a-f]{16}$/.test(ctx.spanId)?ctx.spanId:null,
           parentSpanId:parent&&/^[0-9a-f]{16}$/.test(parent.spanId)?parent.spanId:null,
-          phases:(span.events||[]).map(e=>({name:String(e.name||'').slice(0,64),atMs:durationMs({startTime:e.time,endTime:e.time})})).slice(0,32)
+          phases:(span.events||[]).map(e=>({name:String(e.name||'').slice(0,64),atMs:phaseAtMs(span,e)})).slice(0,32)
         }));
         if(this.#events.length>LIMIT){this.#events.shift();this.#discarded++;}
       }
