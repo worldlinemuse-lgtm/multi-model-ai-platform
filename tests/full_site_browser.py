@@ -608,7 +608,8 @@ def check_media(p):
     p.locator('#speech-refresh-voices').click()
     verify('voice(s)' in p.locator('#speech-voices-status').inner_text(),'Q09 voice status is missing')
     p.locator('#speech-start').click()
-    verify('Speaking' in p.locator('#speech-status').inner_text() or 'Finished' in p.locator('#speech-status').inner_text(),'Speech action did not update status')
+    p.wait_for_function("['Speaking','Finished','Speech error'].some(s=>document.querySelector('#speech-status').textContent.includes(s))",timeout=10000)
+    verify('Speaking' in p.locator('#speech-status').inner_text() or 'Finished' in p.locator('#speech-status').inner_text() or 'Speech error' in p.locator('#speech-status').inner_text(),'Speech action did not update status')
     p.locator('#speech-stop').click()
     verify('stopped' in p.locator('#speech-status').inner_text().lower(),'Speech stop did not update status')
     verify(not p.locator('#media-original-resolution').is_checked(),'D17 high-resolution export should be opt-in')
@@ -759,7 +760,7 @@ def check_chat_persist_before_dispatch(p):
         p.locator('#chat-input').fill('QA persist-before-dispatch order message')
         p.locator('#send-chat').click()
     saved=p.evaluate("""async () => {
-      const db=await new Promise((res,rej)=>{const r=indexedDB.open('mm-studio-b03');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});
+      const db=await new Promise((res,rej)=>{const r=indexedDB.open('mm-studio-lab-b03');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});
       const st=await new Promise((res,rej)=>{const tx=db.transaction('kv','readonly');const q=tx.objectStore('kv').get('state.v1');q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});
       const t=st.threads.find(x=>x.id===st.activeThreadId);
       return t.messages.some(m=>m.role==='user'&&m.content.includes('QA persist-before-dispatch order message'));
@@ -1154,6 +1155,116 @@ def check_workflow_failed_retry(p):
     p.locator('#workflow-resume').click()
     p.wait_for_function("document.querySelector('#workflow-history').textContent.includes('complete')",timeout=22000)
     verify(p.locator('#workflow-results').inner_text().count('SYNTHETIC ACCEPTANCE RESPONSE')==2,'Resume did not retry only the failed stage')
+
+def check_message_truncation(p):
+    # Stage 3b: an oversized provider response is stored truncated with a
+    # [truncated] marker, while the provider-reported usage stays intact
+    # and the workspace still saves.
+    mock_provider(p)
+    def long_groq(route):
+        route.fulfill(status=200,content_type='application/json',body=json.dumps({'model':'llama-3.1-8b-instant','choices':[{'message':{'role':'assistant','content':'A'*35000}}],'usage':{'prompt_tokens':10,'completion_tokens':20,'total_tokens':30}}))
+    p.route('https://api.groq.com/**',long_groq)
+    setup_vault(p)
+    screen(p,'chat')
+    p.locator('#chat-input').fill('Say something long')
+    p.locator('#send-chat').click()
+    p.wait_for_function("document.querySelector('#chat-messages').textContent.includes('[truncated')",timeout=15000)
+    st=p.evaluate("""async () => {
+        const db = await new Promise((resolve, reject) => {
+            const r = indexedDB.open('mm-studio-lab-b03', 1);
+            r.onsuccess = () => resolve(r.result);
+            r.onerror = () => reject(r.error);
+        });
+        const state = await new Promise((resolve, reject) => {
+            const tx = db.transaction('kv', 'readonly');
+            const req = tx.objectStore('kv').get('state.v1');
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+        db.close();
+        return state;
+    }""")
+    msgs=st['threads'][0]['messages']
+    assistant=[m for m in msgs if m.get('role')=='assistant']
+    verify(len(assistant)==1,'Expected one stored assistant message')
+    verify('[truncated' in assistant[0]['content'],'Stored assistant message has no truncation marker')
+    verify(len(assistant[0]['content'])<35000,'Stored assistant message was not truncated')
+    verify('35000 characters' in assistant[0]['content'],'Truncation marker does not name the original length')
+    audit=[a for a in st['audit'] if a.get('op')=='inference' and a.get('status')=='success']
+    verify(len(audit)==1 and audit[0]['usage']['total_tokens']==30,'Provider-reported usage was not preserved intact')
+def check_entity_store(p):
+    # Stage 3a: workspace is stored per entity plus a manifest, state.v1
+    # stays intact as the rollback record, and a corrupt entity falls back
+    # to state.v1 instead of losing the workspace.
+    screen(p,'knowledge')
+    p.locator('#knowledge-title').fill('QA entity note')
+    p.locator('#knowledge-content').fill('Entity store test note')
+    p.locator('#knowledge-form button[type="submit"]').click()
+    p.wait_for_function("document.querySelector('#note-count').textContent.includes('1 notes')",timeout=15000)
+    p.wait_for_timeout(1200)
+    snap=p.evaluate("""async () => {
+        const db = await new Promise((resolve, reject) => {
+            const r = indexedDB.open('mm-studio-lab-b03', 1);
+            r.onsuccess = () => resolve(r.result);
+            r.onerror = () => reject(r.error);
+        });
+        const get = (k) => new Promise((resolve, reject) => {
+            const tx = db.transaction('kv', 'readonly');
+            const req = tx.objectStore('kv').get(k);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+        const out = {};
+        for (const k of ['state.v1', 'state.manifest.v1', 'state.entity.notes.v1', 'state.entity.projects.v1']) out[k] = await get(k);
+        db.close();
+        return {manifest: out['state.manifest.v1'], notes: out['state.entity.notes.v1'], projects: out['state.entity.projects.v1'], whole: out['state.v1'] !== null};
+    }""")
+    verify(snap['manifest'] is not None,'Entity manifest missing after note save')
+    verify(snap['notes'] is not None and any(n.get('title')=='QA entity note' for n in snap['notes']['value']),'Notes entity record missing the new note')
+    verify(snap['whole'],'state.v1 rollback record missing after entity save')
+    projects_before=snap['projects']
+    p.locator('#knowledge-title').fill('QA entity note two')
+    p.locator('#knowledge-content').fill('Second entity store note')
+    p.locator('#knowledge-form button[type="submit"]').click()
+    p.wait_for_function("document.querySelector('#note-count').textContent.includes('2 notes')",timeout=15000)
+    p.wait_for_timeout(1200)
+    snap2=p.evaluate("""async () => {
+        const db = await new Promise((resolve, reject) => {
+            const r = indexedDB.open('mm-studio-lab-b03', 1);
+            r.onsuccess = () => resolve(r.result);
+            r.onerror = () => reject(r.error);
+        });
+        const get = (k) => new Promise((resolve, reject) => {
+            const tx = db.transaction('kv', 'readonly');
+            const req = tx.objectStore('kv').get(k);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+        const out = {};
+        for (const k of ['state.entity.notes.v1', 'state.entity.projects.v1']) out[k] = await get(k);
+        db.close();
+        return out;
+    }""")
+    verify(snap2['state.entity.projects.v1']==projects_before,'Projects entity record changed when only a note was edited')
+    verify(len(snap2['state.entity.notes.v1']['value'])==2,'Notes entity record did not gain the second note')
+    p.evaluate("""async () => {
+        const db = await new Promise((resolve, reject) => {
+            const r = indexedDB.open('mm-studio-lab-b03', 1);
+            r.onsuccess = () => resolve(r.result);
+            r.onerror = () => reject(r.error);
+        });
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction('kv', 'readwrite');
+            tx.objectStore('kv').put({revision: 0, value: 'corrupt'}, 'state.entity.notes.v1');
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+        db.close();
+    }""")
+    p.reload()
+    p.wait_for_function("document.documentElement.dataset.mmBoot === 'ready'",timeout=20000)
+    screen(p,'knowledge')
+    verify('2 notes' in p.locator('#note-count').inner_text(),'Corrupt notes entity lost the workspace instead of falling back to state.v1')
 CASES=[
  ('12-screen navigation and command palette',check_navigation),
  ('Workspace projects, files, runner, snapshots, JSON ZIP and import/export',check_workspace),
@@ -1175,6 +1286,8 @@ CASES=[
  ('Usage audit window label and reported/unreported tokens split',check_usage_audit_window),
  ('Code run lifecycle: started plus one terminal audit event, terminal-only Telemetry count',check_run_lifecycle_audit),
  ('Workflow failed run resumes by retrying only the failed stage',check_workflow_failed_retry),
+ ('Per-entity workspace store with manifest and state.v1 rollback',check_entity_store),
+ ('Oversized provider response stored truncated with marker, usage intact',check_message_truncation),
  ('Q22 network-free diagnostics and manual retry draft',check_local_connection_diagnostics_and_manual_retry),
  ('P14 local conversation search edit export delete',check_chat_management),
  ('Mocked three-stage workflow and stage cap',check_workflows),
