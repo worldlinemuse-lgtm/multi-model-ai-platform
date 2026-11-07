@@ -2,7 +2,7 @@
 Run with --base-url on actual Chromium runner. Each case uses a fresh browser profile.
 Synthetic provider responses are NOT proof of real provider connectivity.
 """
-import argparse,base64,io,json,os,sys,traceback,zipfile,zlib,struct
+import argparse,base64,io,json,os,sys,time,traceback,zipfile,zlib,struct
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
 
@@ -13,6 +13,11 @@ def verify(test, message):
     if not test: raise AssertionError(message)
 def screen(p,name):
     p.locator('[data-view="'+name+'"]').first.click()
+    # The view renders a beat after the click on a cold hosted load
+    # (service-worker install + module load over CDN); is_visible()
+    # does not wait, so asserting immediately flaked the hosted
+    # navigation case (CI run 42251370553, attempt 1: workspace).
+    p.locator('[data-screen="'+name+'"]').wait_for(state='visible',timeout=10000)
     verify(p.locator('[data-screen="'+name+'"]').is_visible(),'Screen did not open: '+name)
 def approve(p,text=''):
     p.once('dialog',lambda d:d.accept(text))
@@ -760,7 +765,7 @@ def check_chat_persist_before_dispatch(p):
         p.locator('#chat-input').fill('QA persist-before-dispatch order message')
         p.locator('#send-chat').click()
     saved=p.evaluate("""async () => {
-      const db=await new Promise((res,rej)=>{const r=indexedDB.open('mm-studio-lab-b03');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});
+      const db=await new Promise((res,rej)=>{const r=indexedDB.open('mm-studio-b03');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});
       const st=await new Promise((res,rej)=>{const tx=db.transaction('kv','readonly');const q=tx.objectStore('kv').get('state.v1');q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});
       const t=st.threads.find(x=>x.id===st.activeThreadId);
       return t.messages.some(m=>m.role==='user'&&m.content.includes('QA persist-before-dispatch order message'));
@@ -1029,7 +1034,7 @@ def check_usage_audit_window(p):
     p.wait_for_timeout(900)
     seeded=p.evaluate("""async () => {
         const open = () => new Promise((resolve, reject) => {
-            const r = indexedDB.open('mm-studio-lab-b03', 1);
+            const r = indexedDB.open('mm-studio-b03', 1);
             r.onsuccess = () => resolve(r.result);
             r.onerror = () => reject(r.error);
         });
@@ -1088,7 +1093,7 @@ def check_run_lifecycle_audit(p):
     p.wait_for_timeout(1200)
     runs=p.evaluate("""async () => {
         const db = await new Promise((resolve, reject) => {
-            const r = indexedDB.open('mm-studio-lab-b03', 1);
+            const r = indexedDB.open('mm-studio-b03', 1);
             r.onsuccess = () => resolve(r.result);
             r.onerror = () => reject(r.error);
         });
@@ -1125,7 +1130,7 @@ def check_workflow_failed_retry(p):
     p.wait_for_function("document.querySelector('#workflow-history').textContent.includes('complete')",timeout=22000)
     p.evaluate("""async () => {
         const db = await new Promise((resolve, reject) => {
-            const r = indexedDB.open('mm-studio-lab-b03', 1);
+            const r = indexedDB.open('mm-studio-b03', 1);
             r.onsuccess = () => resolve(r.result);
             r.onerror = () => reject(r.error);
         });
@@ -1170,39 +1175,113 @@ def check_message_truncation(p):
     p.locator('#send-chat').click()
     p.wait_for_function("document.querySelector('#chat-messages').textContent.includes('[truncated')",timeout=15000)
     # The message renders before the debounced save (300 ms) writes it to
-    # IndexedDB, so wait for the stored state to catch up before reading.
+    # IndexedDB, and a later debounced save can still land after an earlier
+    # one, so a single re-read after a presence check is racy: the wait
+    # passed once while the re-read found zero assistant messages
+    # (CI run 42082955732, first attempt on 84b2d2c). Poll instead until
+    # the stored state itself settles — read it, check the full expected
+    # shape, wait out one debounce window, read it again. The wait only
+    # answers true/false: returning the state object from the wait gave
+    # back a bool at the subscript line instead (CI run 42212606837 on
+    # 6d31f86: TypeError: 'bool' object is not subscriptable), so the
+    # snapshot always comes from evaluate, which is the read the old
+    # code already proved returns the dict.
     p.wait_for_function("""async () => {
-        const db = await new Promise((resolve, reject) => {
-            const r = indexedDB.open('mm-studio-lab-b03', 1);
-            r.onsuccess = () => resolve(r.result);
-            r.onerror = () => reject(r.error);
-        });
-        const state = await new Promise((resolve, reject) => {
-            const tx = db.transaction('kv', 'readonly');
-            const req = tx.objectStore('kv').get('state.v1');
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        });
-        db.close();
-        const t = state.threads.find(x => x.id === state.activeThreadId) || state.threads[0];
-        return t.messages.some(m => m.role === 'assistant');
-    }""",timeout=15000)
-    st=p.evaluate("""async () => {
-        const db = await new Promise((resolve, reject) => {
-            const r = indexedDB.open('mm-studio-lab-b03', 1);
-            r.onsuccess = () => resolve(r.result);
-            r.onerror = () => reject(r.error);
-        });
-        const state = await new Promise((resolve, reject) => {
-            const tx = db.transaction('kv', 'readonly');
-            const req = tx.objectStore('kv').get('state.v1');
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        });
-        db.close();
-        return state;
-    }""")
-    t=next(x for x in st['threads'] if x['id']==st['activeThreadId'])
+        const readState = async () => {
+            const db = await new Promise((resolve, reject) => {
+                const r = indexedDB.open('mm-studio-b03', 1);
+                r.onsuccess = () => resolve(r.result);
+                r.onerror = () => reject(r.error);
+            });
+            const state = await new Promise((resolve, reject) => {
+                const tx = db.transaction('kv', 'readonly');
+                const req = tx.objectStore('kv').get('state.v1');
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+            db.close();
+            return state;
+        };
+        const settled = (state) => {
+            if (!state || !Array.isArray(state.threads)) return null;
+            const t = state.threads.find(x => x.id === state.activeThreadId) || state.threads[0];
+            if (!t || !Array.isArray(t.messages)) return null;
+            const assistant = t.messages.filter(m => m.role === 'assistant');
+            if (assistant.length !== 1) return null;
+            const c = assistant[0].content || '';
+            if (!c.includes('[truncated') || !c.includes('35000 characters') || c.length >= 35000) return null;
+            const audit = (state.audit || []).filter(a => a.op === 'inference' && a.status === 'success');
+            if (audit.length !== 1 || !audit[0].usage || audit[0].usage.total_tokens !== 30) return null;
+            return state;
+        };
+        if (!settled(await readState())) return false;
+        await new Promise(r => setTimeout(r, 400));
+        return !!settled(await readState());
+    }""", timeout=15000)
+    # Even after the wait, one evaluate read has disagreed with it more
+    # than once on hosted runs (the wait saw the settled state, the
+    # immediate read found no assistant message — CI run 42215709359 on
+    # 30fefd6, and again on e3caf5c after the save-serialization fix),
+    # while the same commit passes locally. So re-poll the evaluate read
+    # until the settled shape is observed in TWO consecutive reads 400
+    # ms apart, and only then assert on the second snapshot. If the
+    # state never settles, fail loudly with the last-seen state printed,
+    # so the next failure carries a diagnosis instead of a mystery.
+    def read_stored_state():
+        return p.evaluate("""async () => {
+            const db = await new Promise((resolve, reject) => {
+                const r = indexedDB.open('mm-studio-b03', 1);
+                r.onsuccess = () => resolve(r.result);
+                r.onerror = () => reject(r.error);
+            });
+            const state = await new Promise((resolve, reject) => {
+                const tx = db.transaction('kv', 'readonly');
+                const req = tx.objectStore('kv').get('state.v1');
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+            db.close();
+            return state;
+        }""")
+    def settled_shape(state):
+        if not state or not isinstance(state.get('threads'), list):
+            return False
+        threads = state['threads']
+        t = next((x for x in threads if x.get('id') == state.get('activeThreadId')), threads[0] if threads else None)
+        if not t or not isinstance(t.get('messages'), list):
+            return False
+        assistant = [m for m in t['messages'] if m.get('role') == 'assistant']
+        if len(assistant) != 1:
+            return False
+        c = assistant[0].get('content') or ''
+        if '[truncated' not in c or '35000 characters' not in c or len(c) >= 35000:
+            return False
+        audit = [a for a in (state.get('audit') or []) if a.get('op') == 'inference' and a.get('status') == 'success']
+        return len(audit) == 1 and (audit[0].get('usage') or {}).get('total_tokens') == 30
+    deadline = time.time() + 15
+    st = None
+    last = None
+    while time.time() < deadline:
+        last = read_stored_state()
+        if settled_shape(last):
+            time.sleep(0.4)
+            st = read_stored_state()
+            if settled_shape(st):
+                break
+            st = None
+        time.sleep(0.1)
+    if st is None:
+        if last is None:
+            summary = 'no state could be read from IndexedDB'
+        else:
+            summary = ('threads=%d active=%s assistant_per_thread=%s audit_success=%d revision=%s' % (
+                len(last.get('threads') or []),
+                last.get('activeThreadId'),
+                [len([m for m in (t.get('messages') or []) if m.get('role') == 'assistant']) for t in (last.get('threads') or [])],
+                len([a for a in (last.get('audit') or []) if a.get('op') == 'inference' and a.get('status') == 'success']),
+                last.get('revision')))
+        verify(False, 'Stored state never settled: ' + summary)
+    t = next((x for x in st['threads'] if x['id'] == st['activeThreadId']), st['threads'][0])
     msgs=t['messages']
     assistant=[m for m in msgs if m.get('role')=='assistant']
     verify(len(assistant)==1,'Expected one stored assistant message')
@@ -1223,7 +1302,7 @@ def check_entity_store(p):
     p.wait_for_timeout(1200)
     snap=p.evaluate("""async () => {
         const db = await new Promise((resolve, reject) => {
-            const r = indexedDB.open('mm-studio-lab-b03', 1);
+            const r = indexedDB.open('mm-studio-b03', 1);
             r.onsuccess = () => resolve(r.result);
             r.onerror = () => reject(r.error);
         });
@@ -1249,7 +1328,7 @@ def check_entity_store(p):
     p.wait_for_timeout(1200)
     snap2=p.evaluate("""async () => {
         const db = await new Promise((resolve, reject) => {
-            const r = indexedDB.open('mm-studio-lab-b03', 1);
+            const r = indexedDB.open('mm-studio-b03', 1);
             r.onsuccess = () => resolve(r.result);
             r.onerror = () => reject(r.error);
         });
@@ -1268,7 +1347,7 @@ def check_entity_store(p):
     verify(len(snap2['state.entity.notes.v1']['value'])==2,'Notes entity record did not gain the second note')
     p.evaluate("""async () => {
         const db = await new Promise((resolve, reject) => {
-            const r = indexedDB.open('mm-studio-lab-b03', 1);
+            const r = indexedDB.open('mm-studio-b03', 1);
             r.onsuccess = () => resolve(r.result);
             r.onerror = () => reject(r.error);
         });
