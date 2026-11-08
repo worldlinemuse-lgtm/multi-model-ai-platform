@@ -2,7 +2,7 @@
 Run with --base-url on actual Chromium runner. Each case uses a fresh browser profile.
 Synthetic provider responses are NOT proof of real provider connectivity.
 """
-import argparse,base64,io,json,os,sys,traceback,zipfile,zlib,struct
+import argparse,base64,io,json,os,sys,time,traceback,zipfile,zlib,struct
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
 
@@ -13,6 +13,11 @@ def verify(test, message):
     if not test: raise AssertionError(message)
 def screen(p,name):
     p.locator('[data-view="'+name+'"]').first.click()
+    # The view renders a beat after the click on a cold hosted load
+    # (service-worker install + module load over CDN); is_visible()
+    # does not wait, so asserting immediately flaked the hosted
+    # navigation case (CI run 42251370553, attempt 1: workspace).
+    p.locator('[data-screen="'+name+'"]').wait_for(state='visible',timeout=10000)
     verify(p.locator('[data-screen="'+name+'"]').is_visible(),'Screen did not open: '+name)
 def approve(p,text=''):
     p.once('dialog',lambda d:d.accept(text))
@@ -608,7 +613,8 @@ def check_media(p):
     p.locator('#speech-refresh-voices').click()
     verify('voice(s)' in p.locator('#speech-voices-status').inner_text(),'Q09 voice status is missing')
     p.locator('#speech-start').click()
-    verify('Speaking' in p.locator('#speech-status').inner_text() or 'Finished' in p.locator('#speech-status').inner_text(),'Speech action did not update status')
+    p.wait_for_function("['Speaking','Finished','Speech error'].some(s=>document.querySelector('#speech-status').textContent.includes(s))",timeout=10000)
+    verify('Speaking' in p.locator('#speech-status').inner_text() or 'Finished' in p.locator('#speech-status').inner_text() or 'Speech error' in p.locator('#speech-status').inner_text(),'Speech action did not update status')
     p.locator('#speech-stop').click()
     verify('stopped' in p.locator('#speech-status').inner_text().lower(),'Speech stop did not update status')
     verify(not p.locator('#media-original-resolution').is_checked(),'D17 high-resolution export should be opt-in')
@@ -917,10 +923,22 @@ def check_chat_double_submit_guard(p):
     q.locator('#send-chat').click()
     q.evaluate("document.querySelector('#chat-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))")
     q.wait_for_function("document.querySelector('#toast').textContent.includes('already in progress')",timeout=10000)
+    # While the durable prompt write is pending, the thread must not be
+    # deleted, cleared or replaced. Accept any dialog so a missing guard
+    # cannot pass solely because Playwright dismissed confirmation.
+    q.on('dialog',lambda d:d.accept())
+    q.locator('#new-chat').click()
+    q.locator('#clear-chat').click()
+    q.locator('#delete-chat-thread').click()
+    verify(q.locator('#thread-list .thread-entry').count()==1,'New thread was created during pending prompt save')
+    verify(q.locator('#chat-messages .bubble.user').count()==1,'Conversation mutated during pending save')
     q.wait_for_function("document.querySelector('#chat-messages').textContent.includes('SYNTHETIC ACCEPTANCE RESPONSE')",timeout=20000)
     verify(q.locator('#chat-messages .bubble.user').count()==1,'Double submit recorded two user messages')
     verify(len(hits)==1,'Double submit dispatched two provider requests')
-    verify(q.locator('#send-chat').is_enabled(),'Send was not re-enabled after the guarded send')
+    # A response bubble renders before the explicit terminal durability write;
+    # Send is deliberately disabled until that write commits.
+    q.wait_for_function("document.querySelector('#send-chat').disabled===false",timeout=15000)
+    verify(q.locator('#send-chat').is_enabled(),'Send was not re-enabled after the durable response save')
     # Let the response's debounced save settle before breaking writes.
     q.evaluate("window.__delayWrites=false")
     q.wait_for_timeout(800)
@@ -935,8 +953,417 @@ def check_chat_double_submit_guard(p):
     verify(q.locator('#chat-input').input_value()=='QA failed-save guard message','Failed save did not restore the prompt')
     verify(q.locator('#send-chat').is_enabled(),'Send was not re-enabled after the failed save')
     verify(len(hits)==1,'Provider was called despite the failed save')
+    # A transient write failure must not disable later ordinary saving.
+    # The user can retry after storage recovers and the completed response
+    # must survive a full browser reload, not merely exist in memory.
+    q.evaluate("window.__breakWrites=false")
+    q.locator('#chat-input').fill('QA recovered persistence reply')
+    q.locator('#send-chat').click()
+    q.wait_for_function("document.querySelectorAll('#chat-messages .bubble.assistant').length>=2",timeout=15000)
+    q.wait_for_function("document.querySelector('#send-chat').disabled===false",timeout=15000)
+    verify(len(hits)==2,'Recovered send did not dispatch exactly one provider request')
+    q.reload(timeout=25000)
+    # The hash persists on reload, so the restored view may already be chat.
+    q.wait_for_function("document.querySelector('#chat-messages')?.textContent.includes('QA recovered persistence reply')",timeout=16000)
+    screen(q,'chat')
+    verify('QA recovered persistence reply' in q.locator('#chat-messages').inner_text(),'Recovered prompt not saved across reload')
+    verify(q.locator('#chat-messages .bubble.assistant').count()>=2,'Recovered provider reply did not persist across reload')
     verify(not errors,'Page errors on the chat concurrency page: '+str(errors))
     ctx.close()
+def check_cross_tab_revision(p):
+    # Cross-tab revisions: two pages in one context share IndexedDB, so
+    # the second page boots stale. Its later save must not silently
+    # overwrite the first page's newer workspace. It must warn, export
+    # a backup of its own state, and leave the stored record untouched.
+    base=p.url.split('#')[0]
+    ctx=p.context.browser.new_context(accept_downloads=True,viewport={'width':1360,'height':860})
+    a=ctx.new_page();b=ctx.new_page()
+    errors=[]
+    a.on('pageerror',lambda e:errors.append(str(e)))
+    b.on('pageerror',lambda e:errors.append(str(e)))
+    a.goto(base,timeout=25000);a.locator('#view-overview h1').wait_for(timeout=16000)
+    b.goto(base,timeout=25000);b.locator('#view-overview h1').wait_for(timeout=16000)
+    # Page A saves first, while B is already stale.
+    screen(a,'knowledge')
+    a.locator('#knowledge-title').fill('QA cross-tab A note')
+    a.locator('#knowledge-content').fill('Written by the first tab')
+    a.locator('#knowledge-form button[type="submit"]').click()
+    a.wait_for_function("document.querySelector('#note-count').textContent.includes('1 notes')",timeout=10000)
+    a.wait_for_timeout(900)
+    # Page B edits and saves; the conflict backup download is the
+    # keep-both path, and the toast is the warning.
+    screen(b,'knowledge')
+    b.locator('#knowledge-title').fill('QA cross-tab B note')
+    b.locator('#knowledge-content').fill('Written by the stale tab')
+    with b.expect_download(timeout=15000) as dl:
+        b.locator('#knowledge-form button[type="submit"]').click()
+        b.wait_for_function("document.querySelector('#toast').textContent.includes('Another tab')",timeout=10000)
+    backup=Path(dl.value.path()).read_bytes()
+    verify(b'QA cross-tab B note' in backup,'Conflict backup did not contain the stale tab work')
+    verify('Not saved' in b.locator('#save-indicator').inner_text(),'Stale tab did not report the refused save')
+    # The stored workspace still holds A's note only: reload B and it
+    # loads A's note, not its own.
+    b.reload(timeout=25000)
+    b.wait_for_function("document.documentElement.dataset.mmBoot==='ready'",timeout=16000)
+    screen(b,'knowledge')
+    b.locator('#knowledge-search').fill('QA cross-tab')
+    b.wait_for_function("document.querySelector('#knowledge-results').textContent.includes('QA cross-tab A note')",timeout=10000)
+    verify('QA cross-tab B note' not in b.locator('#knowledge-results').inner_text(),'Stale tab overwrote the newer workspace')
+    # Same-tab saves still work after a conflict elsewhere: A saves a
+    # second note with no conflict warning.
+    screen(a,'knowledge')
+    a.locator('#knowledge-title').fill('QA cross-tab A second note')
+    a.locator('#knowledge-content').fill('Written by the first tab after the conflict')
+    a.locator('#knowledge-form button[type="submit"]').click()
+    a.wait_for_function("document.querySelector('#note-count').textContent.includes('2 notes')",timeout=10000)
+    a.wait_for_timeout(900)
+    a.reload(timeout=25000)
+    a.wait_for_function("document.documentElement.dataset.mmBoot==='ready'",timeout=16000)
+    screen(a,'knowledge')
+    a.locator('#knowledge-search').fill('QA cross-tab')
+    a.wait_for_function("document.querySelector('#knowledge-results').textContent.includes('QA cross-tab A second note')",timeout=10000)
+    verify(not errors,'Page errors on the cross-tab page: '+str(errors))
+    ctx.close()
+
+def check_usage_audit_window(p):
+    # Stage 2d: the Usage table shows only a window of the audit log, and
+    # the tokens line must split reported from unreported calls. Seed a
+    # 120-event audit state directly in IndexedDB, then reload so boot
+    # loads it: 3 reported inference attempts (10+20+30 tokens), 2
+    # unreported inference attempts, and 115 filler events.
+    p.wait_for_timeout(900)
+    seeded=p.evaluate("""async () => {
+        const open = () => new Promise((resolve, reject) => {
+            const r = indexedDB.open('mm-studio-b03', 1);
+            r.onsuccess = () => resolve(r.result);
+            r.onerror = () => reject(r.error);
+        });
+        const db = await open();
+        const get = () => new Promise((resolve, reject) => {
+            const tx = db.transaction('kv', 'readonly');
+            const req = tx.objectStore('kv').get('state.v1');
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+        const state = await get();
+        const at = '2026-11-04T12:00:00.000Z';
+        const reported = [10, 20, 30].map((total, i) => ({
+            id: 'event-reported-' + i, at, op: 'inference', provider: 'groq',
+            status: 'success', model: 'llama-3.1-8b-instant',
+            usage: {prompt_tokens: total, completion_tokens: 0, total_tokens: total, source: 'test'}}));
+        const unreported = [0, 1].map(i => ({
+            id: 'event-unreported-' + i, at, op: 'inference', provider: 'groq',
+            status: 'failed', model: 'llama-3.1-8b-instant', usage: null}));
+        const filler = Array.from({length: 115}, (_, i) => ({
+            id: 'event-filler-' + i, at, op: 'run', provider: 'local',
+            status: 'started', usage: null}));
+        state.audit = [...reported, ...unreported, ...filler];
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction('kv', 'readwrite');
+            tx.objectStore('kv').put(state, 'state.v1');
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+        db.close();
+        return true;
+    }""")
+    verify(seeded, 'Seeding the audit state in IndexedDB failed')
+    p.reload(timeout=25000)
+    p.wait_for_function("document.documentElement.dataset.mmBoot==='ready'", timeout=16000)
+    screen(p, 'usage')
+    verify(p.locator('#audit-window').count() == 1, 'Usage audit window label missing')
+    verify(p.locator('#audit-window').inner_text() == 'Showing latest 100 of 120 recorded events (audit log capped at 500).', 'Audit window label wrong: ' + p.locator('#audit-window').inner_text())
+    verify(p.locator('#audit-rows tr').count() == 100, 'Audit table did not render exactly the 100-row window')
+    verify(p.locator('#usage-total').inner_text() == '5', 'Usage total did not count all 5 terminal inference attempts')
+    verify(p.locator('#usage-tokens').inner_text() == '60 tokens', 'Tokens total wrong: ' + p.locator('#usage-tokens').inner_text())
+    verify(p.locator('#usage-tokens-note').inner_text() == 'across 3 calls with reported usage; 2 calls reported no usage', 'Tokens line did not split reported from unreported calls: ' + p.locator('#usage-tokens-note').inner_text())
+
+def check_run_lifecycle_audit(p):
+    # Stage 3c (amended): a code run audits 'started' plus exactly one
+    # terminal event, and Telemetry CODE RUNS counts terminal events
+    # only. Run once to completion and once to an error, then read the
+    # audit log back out of IndexedDB and check the Telemetry headline.
+    screen(p,'workspace')
+    p.locator('#code-editor').fill('console.log("QA_RUN_OK");')
+    p.locator('#run-code').click()
+    p.wait_for_function("document.querySelector('#console-output').textContent.includes('QA_RUN_OK')",timeout=10000)
+    p.wait_for_function("document.querySelector('#console-output').textContent.includes('Execution complete.')",timeout=10000)
+    p.locator('#code-editor').fill('throw new Error("QA_RUN_BOOM");')
+    p.locator('#run-code').click()
+    p.wait_for_function("document.querySelector('#console-output').textContent.includes('QA_RUN_BOOM')",timeout=10000)
+    p.wait_for_timeout(1200)
+    runs=p.evaluate("""async () => {
+        const db = await new Promise((resolve, reject) => {
+            const r = indexedDB.open('mm-studio-b03', 1);
+            r.onsuccess = () => resolve(r.result);
+            r.onerror = () => reject(r.error);
+        });
+        const state = await new Promise((resolve, reject) => {
+            const tx = db.transaction('kv', 'readonly');
+            const req = tx.objectStore('kv').get('state.v1');
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+        db.close();
+        return (state.audit || []).filter(e => e.op === 'run').map(e => e.status);
+    }""")
+    verify(runs.count('started') == 2, 'Run lifecycle did not audit two started events: ' + str(runs))
+    verify(runs.count('success') == 1, 'Completed run did not audit exactly one success: ' + str(runs))
+    verify(runs.count('failed') == 1, 'Errored run did not audit exactly one failed: ' + str(runs))
+    verify(len(runs) == 4, 'Run audit events were not exactly started+terminal per run: ' + str(runs))
+    screen(p,'telemetry')
+    headline=p.locator('#telemetry-headline').inner_text()
+    verify('CODE RUNS' in headline, 'Telemetry headline missing CODE RUNS')
+    verify('1 failed' in headline, 'Telemetry CODE RUNS failed subcount did not count the errored run: ' + headline)
+
+def check_workflow_failed_retry(p):
+    # Stage 2c: a failed workflow run is resumable, and resume retries the
+    # failed stage only, keeping the completed stage output.
+    mock_provider(p)
+    setup_vault(p)
+    screen(p,'workflows')
+    p.locator('#workflow-route').select_option('groq')
+    p.locator('#workflow-template').select_option('explain')
+    p.locator('#workflow-stages').fill('First pass\nSecond pass')
+    p.locator('#workflow-goal').fill('Describe test execution only')
+    p.locator('#workflow-confirm').check()
+    p.locator('#workflow-start').click()
+    p.wait_for_function("document.querySelector('#workflow-history').textContent.includes('complete')",timeout=22000)
+    p.evaluate("""async () => {
+        const db = await new Promise((resolve, reject) => {
+            const r = indexedDB.open('mm-studio-b03', 1);
+            r.onsuccess = () => resolve(r.result);
+            r.onerror = () => reject(r.error);
+        });
+        const state = await new Promise((resolve, reject) => {
+            const tx = db.transaction('kv', 'readwrite');
+            const store = tx.objectStore('kv');
+            const req = store.get('state.v1');
+            req.onsuccess = () => {
+                const s = req.result;
+                const w = s.workflows[0];
+                w.status = 'failed';
+                w.steps[1] = {stage: w.steps[1].stage, provider: 'groq', status: 'failed', content: 'synthetic failure'};
+                store.put(s, 'state.v1');
+            };
+            req.onerror = () => reject(req.error);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+        db.close();
+    }""")
+    p.reload()
+    p.wait_for_function("document.documentElement.dataset.mmBoot === 'ready'",timeout=20000)
+    setup_vault(p)
+    screen(p,'workflows')
+    verify(not p.locator('#workflow-resume').is_disabled(),'Failed workflow run is not resumable')
+    approve(p)
+    p.locator('#workflow-resume').click()
+    p.wait_for_function("document.querySelector('#workflow-history').textContent.includes('complete')",timeout=22000)
+    verify(p.locator('#workflow-results').inner_text().count('SYNTHETIC ACCEPTANCE RESPONSE')==2,'Resume did not retry only the failed stage')
+
+def check_message_truncation(p):
+    # Stage 3b: an oversized provider response is stored truncated with a
+    # [truncated] marker, while the provider-reported usage stays intact
+    # and the workspace still saves.
+    mock_provider(p)
+    def long_groq(route):
+        route.fulfill(status=200,content_type='application/json',body=json.dumps({'model':'llama-3.1-8b-instant','choices':[{'message':{'role':'assistant','content':'A'*35000}}],'usage':{'prompt_tokens':10,'completion_tokens':20,'total_tokens':30}}))
+    p.route('https://api.groq.com/**',long_groq)
+    setup_vault(p)
+    screen(p,'chat')
+    p.locator('#chat-input').fill('Say something long')
+    p.locator('#send-chat').click()
+    p.wait_for_function("document.querySelector('#chat-messages').textContent.includes('[truncated')",timeout=15000)
+    # The message renders before the debounced save (300 ms) writes it to
+    # IndexedDB, and a later debounced save can still land after an earlier
+    # one, so a single re-read after a presence check is racy: the wait
+    # passed once while the re-read found zero assistant messages
+    # (CI run 42082955732, first attempt on 84b2d2c). Poll instead until
+    # the stored state itself settles — read it, check the full expected
+    # shape, wait out one debounce window, read it again. The wait only
+    # answers true/false: returning the state object from the wait gave
+    # back a bool at the subscript line instead (CI run 42212606837 on
+    # 6d31f86: TypeError: 'bool' object is not subscriptable), so the
+    # snapshot always comes from evaluate, which is the read the old
+    # code already proved returns the dict.
+    p.wait_for_function("""async () => {
+        const readState = async () => {
+            const db = await new Promise((resolve, reject) => {
+                const r = indexedDB.open('mm-studio-b03', 1);
+                r.onsuccess = () => resolve(r.result);
+                r.onerror = () => reject(r.error);
+            });
+            const state = await new Promise((resolve, reject) => {
+                const tx = db.transaction('kv', 'readonly');
+                const req = tx.objectStore('kv').get('state.v1');
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+            db.close();
+            return state;
+        };
+        const settled = (state) => {
+            if (!state || !Array.isArray(state.threads)) return null;
+            const t = state.threads.find(x => x.id === state.activeThreadId) || state.threads[0];
+            if (!t || !Array.isArray(t.messages)) return null;
+            const assistant = t.messages.filter(m => m.role === 'assistant');
+            if (assistant.length !== 1) return null;
+            const c = assistant[0].content || '';
+            if (!c.includes('[truncated') || !c.includes('35000 characters') || c.length >= 35000) return null;
+            const audit = (state.audit || []).filter(a => a.op === 'inference' && a.status === 'success');
+            if (audit.length !== 1 || !audit[0].usage || audit[0].usage.total_tokens !== 30) return null;
+            return state;
+        };
+        if (!settled(await readState())) return false;
+        await new Promise(r => setTimeout(r, 400));
+        return !!settled(await readState());
+    }""", timeout=15000)
+    # Even after the wait, one evaluate read has disagreed with it more
+    # than once on hosted runs (the wait saw the settled state, the
+    # immediate read found no assistant message — CI run 42215709359 on
+    # 30fefd6, and again on e3caf5c after the save-serialization fix),
+    # while the same commit passes locally. So re-poll the evaluate read
+    # until the settled shape is observed in TWO consecutive reads 400
+    # ms apart, and only then assert on the second snapshot. If the
+    # state never settles, fail loudly with the last-seen state printed,
+    # so the next failure carries a diagnosis instead of a mystery.
+    def read_stored_state():
+        return p.evaluate("""async () => {
+            const db = await new Promise((resolve, reject) => {
+                const r = indexedDB.open('mm-studio-b03', 1);
+                r.onsuccess = () => resolve(r.result);
+                r.onerror = () => reject(r.error);
+            });
+            const state = await new Promise((resolve, reject) => {
+                const tx = db.transaction('kv', 'readonly');
+                const req = tx.objectStore('kv').get('state.v1');
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+            db.close();
+            return state;
+        }""")
+    def settled_shape(state):
+        if not state or not isinstance(state.get('threads'), list):
+            return False
+        threads = state['threads']
+        t = next((x for x in threads if x.get('id') == state.get('activeThreadId')), threads[0] if threads else None)
+        if not t or not isinstance(t.get('messages'), list):
+            return False
+        assistant = [m for m in t['messages'] if m.get('role') == 'assistant']
+        if len(assistant) != 1:
+            return False
+        c = assistant[0].get('content') or ''
+        if '[truncated' not in c or '35000 characters' not in c or len(c) >= 35000:
+            return False
+        audit = [a for a in (state.get('audit') or []) if a.get('op') == 'inference' and a.get('status') == 'success']
+        return len(audit) == 1 and (audit[0].get('usage') or {}).get('total_tokens') == 30
+    deadline = time.time() + 15
+    st = None
+    last = None
+    while time.time() < deadline:
+        last = read_stored_state()
+        if settled_shape(last):
+            time.sleep(0.4)
+            st = read_stored_state()
+            if settled_shape(st):
+                break
+            st = None
+        time.sleep(0.1)
+    if st is None:
+        if last is None:
+            summary = 'no state could be read from IndexedDB'
+        else:
+            summary = ('threads=%d active=%s assistant_per_thread=%s audit_success=%d revision=%s' % (
+                len(last.get('threads') or []),
+                last.get('activeThreadId'),
+                [len([m for m in (t.get('messages') or []) if m.get('role') == 'assistant']) for t in (last.get('threads') or [])],
+                len([a for a in (last.get('audit') or []) if a.get('op') == 'inference' and a.get('status') == 'success']),
+                last.get('revision')))
+        verify(False, 'Stored state never settled: ' + summary)
+    t = next((x for x in st['threads'] if x['id'] == st['activeThreadId']), st['threads'][0])
+    msgs=t['messages']
+    assistant=[m for m in msgs if m.get('role')=='assistant']
+    verify(len(assistant)==1,'Expected one stored assistant message')
+    verify('[truncated' in assistant[0]['content'],'Stored assistant message has no truncation marker')
+    verify(len(assistant[0]['content'])<35000,'Stored assistant message was not truncated')
+    verify('35000 characters' in assistant[0]['content'],'Truncation marker does not name the original length')
+    audit=[a for a in st['audit'] if a.get('op')=='inference' and a.get('status')=='success']
+    verify(len(audit)==1 and audit[0]['usage']['total_tokens']==30,'Provider-reported usage was not preserved intact')
+def check_entity_store(p):
+    # Stage 3a: workspace is stored per entity plus a manifest, state.v1
+    # stays intact as the rollback record, and a corrupt entity falls back
+    # to state.v1 instead of losing the workspace.
+    screen(p,'knowledge')
+    p.locator('#knowledge-title').fill('QA entity note')
+    p.locator('#knowledge-content').fill('Entity store test note')
+    p.locator('#knowledge-form button[type="submit"]').click()
+    p.wait_for_function("document.querySelector('#note-count').textContent.includes('1 notes')",timeout=15000)
+    p.wait_for_timeout(1200)
+    snap=p.evaluate("""async () => {
+        const db = await new Promise((resolve, reject) => {
+            const r = indexedDB.open('mm-studio-b03', 1);
+            r.onsuccess = () => resolve(r.result);
+            r.onerror = () => reject(r.error);
+        });
+        const get = (k) => new Promise((resolve, reject) => {
+            const tx = db.transaction('kv', 'readonly');
+            const req = tx.objectStore('kv').get(k);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+        const out = {};
+        for (const k of ['state.v1', 'state.manifest.v1', 'state.entity.notes.v1', 'state.entity.projects.v1']) out[k] = await get(k);
+        db.close();
+        return {manifest: out['state.manifest.v1'], notes: out['state.entity.notes.v1'], projects: out['state.entity.projects.v1'], whole: out['state.v1'] !== null};
+    }""")
+    verify(snap['manifest'] is not None,'Entity manifest missing after note save')
+    verify(snap['notes'] is not None and any(n.get('title')=='QA entity note' for n in snap['notes']['value']),'Notes entity record missing the new note')
+    verify(snap['whole'],'state.v1 rollback record missing after entity save')
+    projects_before=snap['projects']
+    p.locator('#knowledge-title').fill('QA entity note two')
+    p.locator('#knowledge-content').fill('Second entity store note')
+    p.locator('#knowledge-form button[type="submit"]').click()
+    p.wait_for_function("document.querySelector('#note-count').textContent.includes('2 notes')",timeout=15000)
+    p.wait_for_timeout(1200)
+    snap2=p.evaluate("""async () => {
+        const db = await new Promise((resolve, reject) => {
+            const r = indexedDB.open('mm-studio-b03', 1);
+            r.onsuccess = () => resolve(r.result);
+            r.onerror = () => reject(r.error);
+        });
+        const get = (k) => new Promise((resolve, reject) => {
+            const tx = db.transaction('kv', 'readonly');
+            const req = tx.objectStore('kv').get(k);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+        const out = {};
+        for (const k of ['state.entity.notes.v1', 'state.entity.projects.v1']) out[k] = await get(k);
+        db.close();
+        return out;
+    }""")
+    verify(snap2['state.entity.projects.v1']==projects_before,'Projects entity record changed when only a note was edited')
+    verify(len(snap2['state.entity.notes.v1']['value'])==2,'Notes entity record did not gain the second note')
+    p.evaluate("""async () => {
+        const db = await new Promise((resolve, reject) => {
+            const r = indexedDB.open('mm-studio-b03', 1);
+            r.onsuccess = () => resolve(r.result);
+            r.onerror = () => reject(r.error);
+        });
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction('kv', 'readwrite');
+            tx.objectStore('kv').put({revision: 0, value: 'corrupt'}, 'state.entity.notes.v1');
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+        db.close();
+    }""")
+    p.reload()
+    p.wait_for_function("document.documentElement.dataset.mmBoot === 'ready'",timeout=20000)
+    screen(p,'knowledge')
+    verify('2 notes' in p.locator('#note-count').inner_text(),'Corrupt notes entity lost the workspace instead of falling back to state.v1')
 CASES=[
  ('12-screen navigation and command palette',check_navigation),
  ('Workspace projects, files, runner, snapshots, JSON ZIP and import/export',check_workspace),
@@ -954,6 +1381,12 @@ CASES=[
  ('Failed and stopped chat requests do not restore the prompt or duplicate the message',check_chat_retry_no_duplicate),
  ('Chat prompt persists before provider dispatch, compare send, failed-save gate',check_chat_persist_before_dispatch),
  ('Chat double submit during save is guarded, failed save rolls back exactly',check_chat_double_submit_guard),
+ ('Cross-tab revision check: stale tab warns, exports a backup, does not overwrite',check_cross_tab_revision),
+ ('Usage audit window label and reported/unreported tokens split',check_usage_audit_window),
+ ('Code run lifecycle: started plus one terminal audit event, terminal-only Telemetry count',check_run_lifecycle_audit),
+ ('Workflow failed run resumes by retrying only the failed stage',check_workflow_failed_retry),
+ ('Per-entity workspace store with manifest and state.v1 rollback',check_entity_store),
+ ('Oversized provider response stored truncated with marker, usage intact',check_message_truncation),
  ('Q22 network-free diagnostics and manual retry draft',check_local_connection_diagnostics_and_manual_retry),
  ('P14 local conversation search edit export delete',check_chat_management),
  ('Mocked three-stage workflow and stage cap',check_workflows),
